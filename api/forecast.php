@@ -6,7 +6,8 @@
  * for four fixed Howe Sound locations and caches results as JSON.
  *
  * Endpoint: GET /api/forecast.php
- *   ?debug=1  — show raw GeoMet responses for troubleshooting
+ *   ?debug=1       — test one request per variable, show raw responses
+ *   ?debug=layers  — probe for the correct pressure layer name
  * Returns: JSON with forecast data for pressure, temperature, cloud cover
  */
 
@@ -28,47 +29,83 @@ $locations = [
     'lillooet' => ['name' => 'Lillooet', 'lat' => 50.6868, 'lon' => -121.9422],
 ];
 
+// WMS layer names — TT and NT confirmed working; pressure TBD
 $variables = [
-    'pressure'    => 'HRDPS.CONTINENTAL_PRMSL',
+    'pressure'    => 'HRDPS.CONTINENTAL_PRMSL',  // placeholder — probed in debug=layers
     'temperature' => 'HRDPS.CONTINENTAL_TT',
     'cloud'       => 'HRDPS.CONTINENTAL_NT',
 ];
 
-// --- Debug mode ---
+// --- Debug: probe pressure layer names ---
 
-$debug = isset($_GET['debug']);
-$debugLog = [];
-
-if ($debug) {
-    // In debug mode, skip cache and test one request per variable
+if (isset($_GET['debug']) && $_GET['debug'] === 'layers') {
     $testLoc = $locations['squamish'];
     $modelRun = detectLatestModelRun();
     $forecastHours = getDaytimeUTCHours($modelRun);
-    $testHour = $forecastHours[7] ?? $forecastHours[0]; // ~2pm PT
+    $testHour = $forecastHours[7] ?? $forecastHours[0];
 
-    $debugLog['model_run'] = $modelRun;
-    $debugLog['test_time_utc'] = $testHour['utc'];
-    $debugLog['test_time_pt'] = $testHour['pt_hour'] . ':00 PT';
-    $debugLog['test_location'] = 'Squamish (' . $testLoc['lat'] . ', ' . $testLoc['lon'] . ')';
-    $debugLog['php_version'] = PHP_VERSION;
-    $debugLog['allow_url_fopen'] = ini_get('allow_url_fopen');
-    $debugLog['curl_available'] = function_exists('curl_init');
+    // Candidate pressure layer names to try
+    $candidates = [
+        'HRDPS.CONTINENTAL_PRMSL',
+        'HRDPS.CONTINENTAL_PN',
+        'HRDPS.CONTINENTAL_PRES',
+        'HRDPS.CONTINENTAL_PRES-SFC',
+        'HRDPS.CONTINENTAL_PRES_SFC',
+        'HRDPS.CONTINENTAL.PRES_MSL',
+        'HRDPS.CONTINENTAL_MSL',
+        'HRDPS.CONTINENTAL_MSLP',
+        'HRDPS.CONTINENTAL_PN-SL',
+        'HRDPS.CONTINENTAL_PRES_ISBL_1015',
+    ];
+
+    $results = [];
+    foreach ($candidates as $layer) {
+        $url = buildWmsUrl($layer, $testLoc['lat'], $testLoc['lon'], $testHour['utc']);
+        $raw = httpGet($url);
+        $isError = ($raw === false) || (strpos($raw, 'ServiceException') !== false);
+        $value = (!$isError && $raw !== false) ? parseGeoMetResponse($raw) : null;
+        $results[$layer] = [
+            'works' => !$isError && $value !== null,
+            'parsed_value' => $value,
+            'response_snippet' => $raw !== false ? substr($raw, 0, 200) : 'REQUEST FAILED',
+        ];
+    }
+
+    echo json_encode([
+        'test_time' => $testHour['utc'],
+        'test_location' => 'Squamish',
+        'candidates' => $results,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+// --- Debug: standard test ---
+
+if (isset($_GET['debug'])) {
+    $testLoc = $locations['squamish'];
+    $modelRun = detectLatestModelRun();
+    $forecastHours = getDaytimeUTCHours($modelRun);
+    $testHour = $forecastHours[7] ?? $forecastHours[0];
+
+    $debugLog = [
+        'model_run' => $modelRun,
+        'test_time_utc' => $testHour['utc'],
+        'test_time_pt' => $testHour['pt_hour'] . ':00 PT',
+        'test_location' => 'Squamish (' . $testLoc['lat'] . ', ' . $testLoc['lon'] . ')',
+        'php_version' => PHP_VERSION,
+        'curl_available' => function_exists('curl_init'),
+    ];
 
     foreach ($variables as $varId => $layerName) {
         $url = buildWmsUrl($layerName, $testLoc['lat'], $testLoc['lon'], $testHour['utc']);
+        $raw = httpGet($url);
         $debugLog['requests'][$varId] = [
             'url' => $url,
             'layer' => $layerName,
+            'raw_response' => $raw !== false ? $raw : 'REQUEST FAILED',
+            'raw_length' => $raw !== false ? strlen($raw) : 0,
+            'parsed_value' => ($raw !== false) ? parseGeoMetResponse($raw) : null,
         ];
-
-        $raw = httpGet($url);
-        $debugLog['requests'][$varId]['raw_response'] = $raw !== false ? $raw : 'REQUEST FAILED';
-        $debugLog['requests'][$varId]['raw_length'] = $raw !== false ? strlen($raw) : 0;
-
-        if ($raw !== false) {
-            $value = parseGeoMetResponse($raw);
-            $debugLog['requests'][$varId]['parsed_value'] = $value;
-        }
     }
 
     echo json_encode($debugLog, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -81,7 +118,6 @@ if (!is_dir(CACHE_DIR)) {
     @mkdir(CACHE_DIR, 0755, true);
 }
 
-// Check cache
 $cacheFile = CACHE_DIR . '/forecast_latest.json';
 if (file_exists($cacheFile)) {
     $cacheAge = time() - filemtime($cacheFile);
@@ -117,19 +153,27 @@ foreach ($locations as $locId => $loc) {
             }
 
             if ($value !== null) {
-                // Convert pressure from Pa to hPa if needed
-                if ($varId === 'pressure' && $value > 10000) {
-                    $value = round($value / 100, 1);
-                } elseif ($varId === 'pressure') {
-                    $value = round($value, 1);
+                if ($varId === 'pressure') {
+                    // GeoMet returns Pa — convert to hPa
+                    if ($value > 10000) {
+                        $value = round($value / 100, 1);
+                    } else {
+                        $value = round($value, 1);
+                    }
                 } elseif ($varId === 'temperature') {
+                    // Should already be °C, but handle Kelvin just in case
                     if ($value > 100) {
                         $value = round($value - 273.15, 1);
                     } else {
                         $value = round($value, 1);
                     }
-                } else {
-                    $value = round($value, 0);
+                } elseif ($varId === 'cloud') {
+                    // GeoMet returns fraction 0-1 — convert to percentage
+                    if ($value <= 1.0) {
+                        $value = round($value * 100, 0);
+                    } else {
+                        $value = round($value, 0);
+                    }
                 }
             }
 
@@ -199,20 +243,16 @@ function getDaytimeUTCHours($modelRun) {
 }
 
 /**
- * Build the WMS GetFeatureInfo URL.
- *
- * Uses WMS 1.1.1 with SRS=EPSG:4326 (lon/lat axis order) to avoid
- * the axis-order ambiguity in WMS 1.3.0.
- * Uses X/Y instead of I/J (1.1.1 convention).
+ * Build WMS 1.1.1 GetFeatureInfo URL.
+ * Uses lon,lat BBOX order (WMS 1.1.1 standard for EPSG:4326).
  */
 function buildWmsUrl($layer, $lat, $lon, $utcTime) {
-    // Small bbox around the point — use lon,lat order for EPSG:4326 in WMS 1.1.1
     $delta = 0.015;
     $bbox = implode(',', [
-        $lon - $delta,  // minx (lon)
-        $lat - $delta,  // miny (lat)
-        $lon + $delta,  // maxx (lon)
-        $lat + $delta,  // maxy (lat)
+        $lon - $delta,
+        $lat - $delta,
+        $lon + $delta,
+        $lat + $delta,
     ]);
 
     $params = [
@@ -234,9 +274,6 @@ function buildWmsUrl($layer, $lat, $lon, $utcTime) {
     return GEOMET_URL . '?' . http_build_query($params);
 }
 
-/**
- * Make an HTTP GET request. Uses cURL if available, falls back to file_get_contents.
- */
 function httpGet($url) {
     if (function_exists('curl_init')) {
         $ch = curl_init();
@@ -258,69 +295,41 @@ function httpGet($url) {
         return $response;
     }
 
-    // Fallback to file_get_contents
     $context = stream_context_create([
         'http' => [
             'timeout' => REQUEST_TIMEOUT,
             'header'  => "Accept: application/json, text/plain\r\n",
         ],
     ]);
-    $response = @file_get_contents($url, false, $context);
-    return $response;
+    return @file_get_contents($url, false, $context);
 }
 
 /**
- * Parse the GeoMet WMS GetFeatureInfo response.
- * Handles both JSON (GeoJSON FeatureCollection) and plain text formats.
+ * Parse GeoMet WMS GetFeatureInfo response.
+ * The confirmed response format is GeoJSON with features[0].properties.value
  */
 function parseGeoMetResponse($raw) {
     if (empty($raw)) return null;
 
-    // Try JSON first
+    // Check for XML error responses
+    if (strpos($raw, 'ServiceException') !== false) {
+        return null;
+    }
+
     $data = json_decode($raw, true);
-    if ($data !== null) {
-        // GeoJSON FeatureCollection: features[0].properties.{key}
-        if (isset($data['features']) && is_array($data['features']) && count($data['features']) > 0) {
-            $props = $data['features'][0]['properties'] ?? [];
-            foreach ($props as $key => $val) {
-                if (is_numeric($val)) {
-                    return (float) $val;
-                }
-                // Sometimes value is a string like "15.3"
-                if (is_string($val) && is_numeric(trim($val))) {
-                    return (float) trim($val);
-                }
-            }
-        }
-        // Direct value
-        if (isset($data['value']) && is_numeric($data['value'])) {
-            return (float) $data['value'];
-        }
-        // Array of values
-        if (isset($data['results']) && is_array($data['results'])) {
-            foreach ($data['results'] as $r) {
-                if (isset($r['value']) && is_numeric($r['value'])) {
-                    return (float) $r['value'];
-                }
-            }
+    if ($data === null) {
+        // Not JSON — try plain text
+        if (preg_match('/[Vv]alue[:\s=]+([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)/', $raw, $m)) {
+            return (float) $m[1];
         }
         return null;
     }
 
-    // Try parsing as plain text (common GeoMet format):
-    // "Band 1:"
-    // "  Value: 1013.25"
-    // or just "value = 1013.25"
-    if (preg_match('/[Vv]alue[:\s=]+([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)/', $raw, $m)) {
-        return (float) $m[1];
-    }
-
-    // Try to find any standalone number in the response
-    $lines = explode("\n", trim($raw));
-    foreach ($lines as $line) {
-        $line = trim($line);
-        if ($line !== '' && is_numeric($line)) {
-            return (float) $line;
+    // GeoJSON: features[0].properties.value (confirmed format from GeoMet)
+    if (isset($data['features'][0]['properties']['value'])) {
+        $val = $data['features'][0]['properties']['value'];
+        if (is_numeric($val)) {
+            return (float) $val;
         }
     }
 
