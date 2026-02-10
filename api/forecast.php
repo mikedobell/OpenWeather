@@ -306,9 +306,10 @@ function httpGet($url) {
 
 /**
  * Parse GeoMet WMS GetFeatureInfo response.
- * TT/NT layers return: features[0].properties.value
- * PN layer may return a different property key.
- * Falls back to first numeric property if 'value' key is missing.
+ *
+ * TT/NT layers (raster): features[0].properties.value  (e.g. 9.2 °C)
+ * PN layer (contour):     features[0].properties.pixel  (e.g. 101740.0 Pa)
+ *   - PN also has "ID" (contour index) which must be skipped.
  */
 function parseGeoMetResponse($raw) {
     if (empty($raw)) return null;
@@ -331,16 +332,14 @@ function parseGeoMetResponse($raw) {
     if (isset($data['features'][0]['properties'])) {
         $props = $data['features'][0]['properties'];
 
-        // Try 'value' key first (TT, NT layers)
+        // Try 'value' key first (TT, NT raster layers)
         if (isset($props['value']) && is_numeric($props['value'])) {
             return (float) $props['value'];
         }
 
-        // Fall back: find first numeric property (PN layer may use different key)
-        foreach ($props as $key => $val) {
-            if (is_numeric($val)) {
-                return (float) $val;
-            }
+        // Try 'pixel' key (PN contour layer — actual data value)
+        if (isset($props['pixel']) && is_numeric($props['pixel'])) {
+            return (float) $props['pixel'];
         }
     }
 
