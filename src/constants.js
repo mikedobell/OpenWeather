@@ -34,4 +34,4 @@ for (let h = 7; h <= 21; h++) {
   DAYTIME_HOURS_PT.push(h);
 }
 
-export const API_ENDPOINT = 'api/forecast.php';
+export const API_ENDPOINT = import.meta.env.BASE_URL + 'api/forecast.php';

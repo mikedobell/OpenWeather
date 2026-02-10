@@ -1,6 +1,6 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
+    RewriteBase /wind/
 
     # Serve API requests to PHP
     RewriteRule ^api/(.*)$ api/$1 [L]
