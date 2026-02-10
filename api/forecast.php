@@ -29,9 +29,9 @@ $locations = [
     'lillooet' => ['name' => 'Lillooet', 'lat' => 50.6868, 'lon' => -121.9422],
 ];
 
-// WMS layer names — TT and NT confirmed working; pressure TBD
+// WMS layer names — all confirmed available on GeoMet
 $variables = [
-    'pressure'    => 'HRDPS.CONTINENTAL_PRMSL',  // placeholder — probed in debug=layers
+    'pressure'    => 'HRDPS.CONTINENTAL_PN',
     'temperature' => 'HRDPS.CONTINENTAL_TT',
     'cloud'       => 'HRDPS.CONTINENTAL_NT',
 ];
@@ -67,7 +67,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === 'layers') {
         $results[$layer] = [
             'works' => !$isError && $value !== null,
             'parsed_value' => $value,
-            'response_snippet' => $raw !== false ? substr($raw, 0, 200) : 'REQUEST FAILED',
+            'response_snippet' => $raw !== false ? substr($raw, 0, 600) : 'REQUEST FAILED',
         ];
     }
 
@@ -306,7 +306,9 @@ function httpGet($url) {
 
 /**
  * Parse GeoMet WMS GetFeatureInfo response.
- * The confirmed response format is GeoJSON with features[0].properties.value
+ * TT/NT layers return: features[0].properties.value
+ * PN layer may return a different property key.
+ * Falls back to first numeric property if 'value' key is missing.
  */
 function parseGeoMetResponse($raw) {
     if (empty($raw)) return null;
@@ -325,11 +327,20 @@ function parseGeoMetResponse($raw) {
         return null;
     }
 
-    // GeoJSON: features[0].properties.value (confirmed format from GeoMet)
-    if (isset($data['features'][0]['properties']['value'])) {
-        $val = $data['features'][0]['properties']['value'];
-        if (is_numeric($val)) {
-            return (float) $val;
+    // GeoJSON FeatureCollection
+    if (isset($data['features'][0]['properties'])) {
+        $props = $data['features'][0]['properties'];
+
+        // Try 'value' key first (TT, NT layers)
+        if (isset($props['value']) && is_numeric($props['value'])) {
+            return (float) $props['value'];
+        }
+
+        // Fall back: find first numeric property (PN layer may use different key)
+        foreach ($props as $key => $val) {
+            if (is_numeric($val)) {
+                return (float) $val;
+            }
         }
     }
 
