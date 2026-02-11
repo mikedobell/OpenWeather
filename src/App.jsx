@@ -135,7 +135,7 @@ function Footer() {
             </Link>
           </Text>
           <Text fontSize="xs" color="gray.500" fontStyle="italic">
-            A homemade project for Howe Sound wingfoilers, which may be broken from time to time.
+            A homemade project for S2S windsports, which may be broken from time to time. Please forgive any jank.
           </Text>
           <Text fontSize="xs" color="gray.500">
             Charts show daytime hours (7 AM – 9 PM Pacific). Use arrows to page between forecast days.
@@ -165,10 +165,7 @@ export default function App() {
         {/* Intro text */}
         <Box mb={6}>
           <Text fontSize="sm" color="gray.500" mb={4}>
-            HRDPS forecast data for four locations along the Howe Sound corridor — from the coast
-            (Pam Rocks) through the valley (Squamish) into the mountains (Whistler) and interior
-            (Lillooet). Compare pressure, temperature, and cloud cover to anticipate thermal wind
-            patterns.
+            HRDPS forecast data for four locations along the Sea to Sky corridor — from the coast to the interior. Compare pressure, temperature, and cloud cover to anticipate thermal wind patterns.
           </Text>
           <ModelInfo lastUpdated={lastUpdated} modelRun={modelRun} error={error} />
         </Box>
