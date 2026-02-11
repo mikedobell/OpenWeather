@@ -8,6 +8,7 @@ import {
   TagLabel,
   IconButton,
   useColorModeValue,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import {
@@ -95,6 +96,10 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
   const cardBg = useColorModeValue('white', 'gray.800');
   const gridColor = useColorModeValue('#E2E8F0', '#2D3748');
   const textColor = useColorModeValue('#4A5568', '#A0AEC0');
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  const chartMargin = isMobile
+    ? { top: 2, right: 4, left: -2, bottom: 2 }
+    : { top: 5, right: 20, left: 10, bottom: 5 };
 
   if (!data) return null;
 
@@ -195,7 +200,7 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
 
       <Box h={{ base: '250px', md: '300px' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <AreaChart data={chartData} margin={chartMargin}>
             <defs>
               {LOCATIONS.map((loc) => {
                 const color = isDark ? loc.colorDark : loc.color;
@@ -221,6 +226,7 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
               fontSize={12}
               tick={{ fill: textColor }}
               tickFormatter={(val) => variable.id === 'pressure' ? val.toFixed(1) : Math.round(val)}
+              hide={isMobile}
             />
             <Tooltip content={<CustomTooltip unit={variable.unit} />} />
             {LOCATIONS.map((loc) => {
