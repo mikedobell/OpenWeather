@@ -6,9 +6,10 @@ import {
   HStack,
   Tag,
   TagLabel,
-  TagCloseButton,
+  IconButton,
   useColorModeValue,
 } from '@chakra-ui/react';
+import { ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import {
   AreaChart,
   Area,
@@ -17,7 +18,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import { LOCATIONS } from './constants';
 
@@ -25,6 +25,16 @@ function formatHour(hour) {
   if (hour === 12) return '12 PM';
   if (hour === 0 || hour === 24) return '12 AM';
   return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
+}
+
+/**
+ * Format a YYYY-MM-DD date string as "11 Feb" style.
+ */
+function formatDateLabel(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d} ${months[m - 1]}`;
 }
 
 function CustomTooltip({ active, payload, label, unit }) {
@@ -48,7 +58,38 @@ function CustomTooltip({ active, payload, label, unit }) {
   );
 }
 
-export default function ForecastChart({ variable, data }) {
+function DateNav({ dates, selectedDate, onDateChange }) {
+  const currentIdx = dates.indexOf(selectedDate);
+  const hasPrev = currentIdx > 0;
+  const hasNext = currentIdx < dates.length - 1;
+  const dateLabelColor = useColorModeValue('gray.700', 'gray.200');
+
+  return (
+    <HStack spacing={1}>
+      <IconButton
+        aria-label="Previous day"
+        icon={<ChevronLeftIcon boxSize={5} />}
+        size="sm"
+        variant="ghost"
+        isDisabled={!hasPrev}
+        onClick={() => hasPrev && onDateChange(dates[currentIdx - 1])}
+      />
+      <Text fontSize="sm" fontWeight="semibold" color={dateLabelColor} minW="60px" textAlign="center">
+        {formatDateLabel(selectedDate)}
+      </Text>
+      <IconButton
+        aria-label="Next day"
+        icon={<ChevronRightIcon boxSize={5} />}
+        size="sm"
+        variant="ghost"
+        isDisabled={!hasNext}
+        onClick={() => hasNext && onDateChange(dates[currentIdx + 1])}
+      />
+    </HStack>
+  );
+}
+
+export default function ForecastChart({ variable, data, dates, selectedDate, onDateChange }) {
   const [hiddenSeries, setHiddenSeries] = useState(new Set());
   const isDark = useColorModeValue(false, true);
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -57,15 +98,24 @@ export default function ForecastChart({ variable, data }) {
 
   if (!data) return null;
 
-  // Transform data: merge all locations into rows keyed by hour
+  // Filter data by selected date
   const chartData = [];
-  const hours = data[LOCATIONS[0].id]?.[variable.id] || [];
+  const firstLoc = LOCATIONS[0].id;
+  const allPoints = data[firstLoc]?.[variable.id] || [];
+  const filteredPoints = selectedDate
+    ? allPoints.filter((d) => d.date === selectedDate)
+    : allPoints.filter((d) => !d.date); // fallback for old data without date field
 
-  for (const point of hours) {
+  // If no points match (old API without date field), show all points
+  const pointsToUse = filteredPoints.length > 0 ? filteredPoints : allPoints;
+
+  for (const point of pointsToUse) {
     const row = { hour: point.hour };
     for (const loc of LOCATIONS) {
-      const locData = data[loc.id]?.[variable.id];
-      const match = locData?.find((d) => d.hour === point.hour);
+      const locData = data[loc.id]?.[variable.id] || [];
+      const match = selectedDate
+        ? locData.find((d) => d.hour === point.hour && d.date === selectedDate)
+        : locData.find((d) => d.hour === point.hour);
       row[loc.id] = match ? match.value : null;
     }
     chartData.push(row);
@@ -91,7 +141,11 @@ export default function ForecastChart({ variable, data }) {
   for (const loc of LOCATIONS) {
     if (hiddenSeries.has(loc.id)) continue;
     const locData = data[loc.id]?.[variable.id] || [];
-    allValues = allValues.concat(locData.map((d) => d.value).filter((v) => v !== null));
+    const filtered = selectedDate
+      ? locData.filter((d) => d.date === selectedDate)
+      : locData;
+    const points = filtered.length > 0 ? filtered : locData;
+    allValues = allValues.concat(points.map((d) => d.value).filter((v) => v !== null));
   }
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
@@ -103,11 +157,18 @@ export default function ForecastChart({ variable, data }) {
 
   return (
     <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
-      <Heading size="md" mb={1}>{variable.label} ({variable.unit})</Heading>
-      <Text fontSize="sm" color="gray.500" mb={4}>{variable.description}</Text>
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1} flexWrap="wrap" gap={2}>
+        <Box>
+          <Heading size="md" mb={1}>{variable.label} ({variable.unit})</Heading>
+          <Text fontSize="sm" color="gray.500">{variable.description}</Text>
+        </Box>
+        {dates && dates.length > 1 && (
+          <DateNav dates={dates} selectedDate={selectedDate} onDateChange={onDateChange} />
+        )}
+      </Box>
 
       {/* Legend as clickable tags */}
-      <HStack spacing={2} mb={4} flexWrap="wrap">
+      <HStack spacing={2} mb={4} mt={3} flexWrap="wrap">
         {LOCATIONS.map((loc) => {
           const isHidden = hiddenSeries.has(loc.id);
           const color = isDark ? loc.colorDark : loc.color;

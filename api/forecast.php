@@ -8,7 +8,7 @@
  * Endpoint: GET /api/forecast.php
  *   ?debug=1       — test one request per variable, show raw responses
  *   ?debug=layers  — probe for the correct pressure layer name
- * Returns: JSON with forecast data for pressure, temperature, cloud cover
+ * Returns: JSON with multi-day forecast data for pressure, temperature, cloud cover
  */
 
 header('Content-Type: application/json');
@@ -21,6 +21,7 @@ define('CACHE_DIR', __DIR__ . '/cache');
 define('CACHE_TTL', 10800); // 3 hours
 define('GEOMET_URL', 'https://geo.weather.gc.ca/geomet');
 define('REQUEST_TIMEOUT', 15);
+define('FORECAST_DAYS', 2); // today + tomorrow
 
 $locations = [
     'pamrocks' => ['name' => 'Pam Rocks', 'lat' => 49.4883, 'lon' => -123.2983],
@@ -44,7 +45,6 @@ if (isset($_GET['debug']) && $_GET['debug'] === 'layers') {
     $forecastHours = getDaytimeUTCHours($modelRun);
     $testHour = $forecastHours[7] ?? $forecastHours[0];
 
-    // Candidate pressure layer names to try
     $candidates = [
         'HRDPS.CONTINENTAL_PRMSL',
         'HRDPS.CONTINENTAL_PN',
@@ -91,9 +91,12 @@ if (isset($_GET['debug'])) {
         'model_run' => $modelRun,
         'test_time_utc' => $testHour['utc'],
         'test_time_pt' => $testHour['pt_hour'] . ':00 PT',
+        'test_date_pt' => $testHour['date'],
         'test_location' => 'Squamish (' . $testLoc['lat'] . ', ' . $testLoc['lon'] . ')',
         'php_version' => PHP_VERSION,
         'curl_available' => function_exists('curl_init'),
+        'forecast_days' => FORECAST_DAYS,
+        'total_hours' => count($forecastHours),
     ];
 
     foreach ($variables as $varId => $layerName) {
@@ -130,6 +133,14 @@ if (file_exists($cacheFile)) {
 $modelRun = detectLatestModelRun();
 $forecastHours = getDaytimeUTCHours($modelRun);
 
+// Collect unique PT dates
+$dates = [];
+foreach ($forecastHours as $fh) {
+    if (!in_array($fh['date'], $dates)) {
+        $dates[] = $fh['date'];
+    }
+}
+
 $forecast = [];
 $fetchErrors = 0;
 $fetchTotal = 0;
@@ -154,21 +165,18 @@ foreach ($locations as $locId => $loc) {
 
             if ($value !== null) {
                 if ($varId === 'pressure') {
-                    // GeoMet returns Pa — convert to hPa
                     if ($value > 10000) {
                         $value = round($value / 100, 1);
                     } else {
                         $value = round($value, 1);
                     }
                 } elseif ($varId === 'temperature') {
-                    // Should already be °C, but handle Kelvin just in case
                     if ($value > 100) {
                         $value = round($value - 273.15, 1);
                     } else {
                         $value = round($value, 1);
                     }
                 } elseif ($varId === 'cloud') {
-                    // GeoMet returns fraction 0-1 — convert to percentage
                     if ($value <= 1.0) {
                         $value = round($value * 100, 0);
                     } else {
@@ -180,6 +188,7 @@ foreach ($locations as $locId => $loc) {
             $forecast[$locId][$varId][] = [
                 'hour' => $fh['pt_hour'],
                 'value' => $value,
+                'date' => $fh['date'],
             ];
         }
     }
@@ -187,6 +196,7 @@ foreach ($locations as $locId => $loc) {
 
 $response = [
     'forecast' => $forecast,
+    'dates' => $dates,
     'model_run' => $modelRun,
     'generated_at' => gmdate('c'),
     'locations' => $locations,
@@ -213,30 +223,40 @@ function detectLatestModelRun() {
     return '18';
 }
 
+/**
+ * Get UTC timestamps for daytime hours (7-21 PT) across multiple days.
+ * Returns array of ['utc' => ISO datetime, 'pt_hour' => int, 'date' => 'YYYY-MM-DD'].
+ */
 function getDaytimeUTCHours($modelRun) {
     $vancouver = new DateTimeZone('America/Vancouver');
     $now = new DateTime('now', $vancouver);
     $isDST = (bool) $now->format('I');
     $utcOffset = $isDST ? 7 : 8;
-    $today = $now->format('Y-m-d');
 
     $hours = [];
-    for ($ptHour = 7; $ptHour <= 21; $ptHour++) {
-        $utcHour = $ptHour + $utcOffset;
-        $utcDate = $today;
 
-        if ($utcHour >= 24) {
-            $utcHour -= 24;
-            $tomorrow = (new DateTime($today, $vancouver))->modify('+1 day');
-            $utcDate = $tomorrow->format('Y-m-d');
+    for ($day = 0; $day < FORECAST_DAYS; $day++) {
+        $dateObj = (clone $now)->modify("+{$day} day");
+        $ptDate = $dateObj->format('Y-m-d');
+
+        for ($ptHour = 7; $ptHour <= 21; $ptHour++) {
+            $utcHour = $ptHour + $utcOffset;
+            $utcDate = $ptDate;
+
+            if ($utcHour >= 24) {
+                $utcHour -= 24;
+                $utcDateObj = (new DateTime($ptDate, $vancouver))->modify('+1 day');
+                $utcDate = $utcDateObj->format('Y-m-d');
+            }
+
+            $utcTime = sprintf('%sT%02d:00:00Z', $utcDate, $utcHour);
+
+            $hours[] = [
+                'utc' => $utcTime,
+                'pt_hour' => $ptHour,
+                'date' => $ptDate,
+            ];
         }
-
-        $utcTime = sprintf('%sT%02d:00:00Z', $utcDate, $utcHour);
-
-        $hours[] = [
-            'utc' => $utcTime,
-            'pt_hour' => $ptHour,
-        ];
     }
 
     return $hours;
@@ -314,30 +334,25 @@ function httpGet($url) {
 function parseGeoMetResponse($raw) {
     if (empty($raw)) return null;
 
-    // Check for XML error responses
     if (strpos($raw, 'ServiceException') !== false) {
         return null;
     }
 
     $data = json_decode($raw, true);
     if ($data === null) {
-        // Not JSON — try plain text
         if (preg_match('/[Vv]alue[:\s=]+([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)/', $raw, $m)) {
             return (float) $m[1];
         }
         return null;
     }
 
-    // GeoJSON FeatureCollection
     if (isset($data['features'][0]['properties'])) {
         $props = $data['features'][0]['properties'];
 
-        // Try 'value' key first (TT, NT raster layers)
         if (isset($props['value']) && is_numeric($props['value'])) {
             return (float) $props['value'];
         }
 
-        // Try 'pixel' key (PN contour layer — actual data value)
         if (isset($props['pixel']) && is_numeric($props['pixel'])) {
             return (float) $props['pixel'];
         }

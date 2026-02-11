@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -137,7 +137,7 @@ function Footer() {
             A homemade project for Howe Sound wingfoilers, which may be broken from time to time.
           </Text>
           <Text fontSize="xs" color="gray.500">
-            Charts show daytime hours (7 AM – 9 PM Pacific) for the current forecast day.
+            Charts show daytime hours (7 AM – 9 PM Pacific). Use arrows to page between forecast days.
           </Text>
         </VStack>
       </Container>
@@ -146,7 +146,15 @@ function Footer() {
 }
 
 export default function App() {
-  const { data, loading, error, lastUpdated, modelRun, refetch } = useForecastData();
+  const { data, loading, error, lastUpdated, modelRun, dates, refetch } = useForecastData();
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  // Default to first date when dates become available
+  useEffect(() => {
+    if (dates.length > 0 && !selectedDate) {
+      setSelectedDate(dates[0]);
+    }
+  }, [dates, selectedDate]);
 
   return (
     <Box minH="100vh">
@@ -177,7 +185,14 @@ export default function App() {
         ) : (
           <Box>
             {VARIABLES.map((variable) => (
-              <ForecastChart key={variable.id} variable={variable} data={data} />
+              <ForecastChart
+                key={variable.id}
+                variable={variable}
+                data={data}
+                dates={dates}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+              />
             ))}
           </Box>
         )}

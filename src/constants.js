@@ -10,7 +10,7 @@ export const VARIABLES = [
     id: 'pressure',
     label: 'Surface Pressure',
     unit: 'hPa',
-    layer: 'HRDPS.CONTINENTAL_PRMSL',
+    layer: 'HRDPS.CONTINENTAL_PN',
     description: 'Mean sea-level pressure — higher inland pressure drives katabatic outflow',
   },
   {
