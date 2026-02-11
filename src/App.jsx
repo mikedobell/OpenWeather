@@ -21,6 +21,7 @@ import {
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
 import ForecastChart from './ForecastChart';
+import MarineForecast from './MarineForecast';
 import { VARIABLES } from './constants';
 import useForecastData from './useForecastData';
 
@@ -194,6 +195,8 @@ export default function App() {
                 onDateChange={setSelectedDate}
               />
             ))}
+
+            <MarineForecast />
           </Box>
         )}
       </Container>

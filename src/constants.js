@@ -35,3 +35,4 @@ for (let h = 7; h <= 21; h++) {
 }
 
 export const API_ENDPOINT = import.meta.env.BASE_URL + 'api/forecast.php';
+export const MARINE_API_ENDPOINT = import.meta.env.BASE_URL + 'api/marine.php';
