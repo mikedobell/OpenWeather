@@ -13,12 +13,13 @@ import { MARINE_API_ENDPOINT } from './constants';
 
 const SECTION_CONFIG = {
   warnings: { label: 'Warnings', colorScheme: 'red' },
+  forecast: { label: 'Forecast', colorScheme: 'blue' },
   winds: { label: 'Winds', colorScheme: 'blue' },
   weather: { label: 'Weather & Visibility', colorScheme: 'green' },
   extended: { label: 'Extended Forecast', colorScheme: 'purple' },
 };
 
-const SECTION_ORDER = ['warnings', 'winds', 'weather', 'extended'];
+const SECTION_ORDER = ['warnings', 'forecast', 'winds', 'weather', 'extended'];
 
 function ForecastSection({ sectionKey, section }) {
   const config = SECTION_CONFIG[sectionKey];
@@ -41,9 +42,9 @@ function ForecastSection({ sectionKey, section }) {
     }
   }
 
-  // For winds section: split dense paragraphs at sentence boundaries
+  // For winds/forecast sections: split dense paragraphs at sentence boundaries
   // so each "Wind ..." sentence gets its own line
-  if (sectionKey === 'winds') {
+  if (sectionKey === 'winds' || sectionKey === 'forecast') {
     const expanded = [];
     for (const line of contentLines) {
       // Split on ". Wind " to separate wind period sentences

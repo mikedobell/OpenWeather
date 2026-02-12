@@ -128,22 +128,29 @@ function parseMarineFeed($xml) {
         $feedUpdated = (string) $feed->updated;
     }
 
+    $allEntryTitles = [];
+
     // Process each entry
     foreach ($feed->entry as $entry) {
         $title = strtolower((string) $entry->title);
         $summary = (string) $entry->summary;
         $updated = (string) $entry->updated;
 
+        $allEntryTitles[] = (string) $entry->title;
+
         // Determine which section this entry belongs to
         $sectionKey = null;
-        if (strpos($title, 'wind') !== false && strpos($title, 'warning') === false) {
+        if (strpos($title, 'warning') !== false || strpos($title, 'watch') !== false) {
+            $sectionKey = 'warnings';
+        } elseif (strpos($title, 'extended') !== false) {
+            $sectionKey = 'extended';
+        } elseif (strpos($title, 'wind') !== false) {
             $sectionKey = 'winds';
         } elseif (strpos($title, 'weather') !== false || strpos($title, 'visibility') !== false) {
             $sectionKey = 'weather';
-        } elseif (strpos($title, 'extended') !== false) {
-            $sectionKey = 'extended';
-        } elseif (strpos($title, 'warning') !== false || strpos($title, 'watch') !== false) {
-            $sectionKey = 'warnings';
+        } elseif (strpos($title, 'forecast') !== false || strpos($title, 'synopsis') !== false) {
+            // Generic near-term forecast (catches "Forecast", "Synopsis and Forecasts", etc.)
+            $sectionKey = 'forecast';
         }
 
         if ($sectionKey !== null) {
@@ -161,6 +168,7 @@ function parseMarineFeed($xml) {
         'title' => $feedTitle,
         'updated' => $feedUpdated,
         'sections' => $sections,
+        'entry_titles' => $allEntryTitles,
         'generated_at' => gmdate('c'),
     ];
 }
