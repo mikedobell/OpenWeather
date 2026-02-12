@@ -1,16 +1,20 @@
-# Howe Sound Wingfoil Wind Forecast Web App — PRD
+# Sea to Sky Wind Forecast Web App — PRD
 
 ## Overview
 
-A static web app for local wingfoilers in Howe Sound that displays high-resolution wind forecasts focused on katabatic (downslope) and anabatic (upslope) flow conditions. The site fetches Environment and Climate Change Canada's **HRDPS** model data for four fixed locations along the coast-to-interior transect (Pam Rocks → Squamish → Whistler → Lillooet) and plots key weather variables as area charts. The primary variables are **surface pressure**, **surface temperature**, and **cloud cover**, which help users infer pressure gradients and wind behavior. Forecast data come from the HRDPS (~2.5 km resolution, 48 h ahead, updated 4×/day). Only daytime hours (07:00–21:00 Pacific Time) are displayed. The interface uses Chakra UI for styling and Recharts for charting.
+A static web app for local windsports enthusiasts on the Sea to Sky corridor that displays high-resolution weather forecasts focused on katabatic (downslope) and anabatic (upslope) flow conditions. The site fetches Environment and Climate Change Canada's **HRDPS** model data for four fixed locations along the coast-to-interior transect (Pam Rocks → Squamish → Whistler → Lillooet) and plots key weather variables as area charts. The primary variables are **surface pressure**, **surface temperature**, and **cloud cover**, which help users infer pressure gradients and wind behavior. Additional features include a **tide forecast** chart for Squamish Inner and the **Environment Canada marine forecast** for Howe Sound.
+
+Forecast data come from the HRDPS (~2.5 km resolution, 48 h ahead, updated 4×/day). Only daytime hours (07:00–21:00 Pacific Time) are displayed. Multi-day pagination allows viewing today and tomorrow's forecasts. The interface uses Chakra UI for styling and Recharts for charting.
 
 **Live site**: https://www.dobell.ca/wind/
 
 ## Goals
 
-- **Accurate Local Forecast**: Provide wingfoilers with HRDPS pressure, temperature, and cloud cover data at Howe Sound locations to predict katabatic/anabatic winds.
+- **Accurate Local Forecast**: Provide windsports enthusiasts with HRDPS pressure, temperature, and cloud cover data at Sea to Sky locations to predict katabatic/anabatic winds.
 - **Automatic Updates**: Refresh data when new HRDPS runs are published (~4×/day). PHP proxy caches results server-side.
-- **Clear Visualization**: Interactive area charts (Recharts) with hover tooltips and series toggling.
+- **Clear Visualization**: Interactive area charts (Recharts) with hover tooltips, series toggling, and multi-day pagination.
+- **Tide Information**: Display predicted tide levels for Squamish Inner from CHS data.
+- **Marine Forecast**: Show the latest EC marine forecast text for Howe Sound (winds, weather, extended).
 - **Local Focus**: Four fixed sites only; no user accounts required.
 - **Performance**: Static HTML/JS frontend loads quickly; PHP proxy handles data fetching and caching.
 
@@ -23,16 +27,16 @@ A static web app for local wingfoilers in Howe Sound that displays high-resoluti
 | Whistler | 50.1163 | -122.9574 | ~670 m | Mountain base, alpine influence |
 | Lillooet | 50.6868 | -121.9422 | ~250 m | Interior, dry/hot, pressure source |
 
-## Data Source & Retrieval
+## Data Sources
 
-### Source: HRDPS via MSC GeoMet WMS
+### 1. HRDPS via MSC GeoMet WMS
 
 - **Model**: HRDPS Continental (~2.5 km resolution, 48 h forecast, 4 runs/day at 00Z/06Z/12Z/18Z)
 - **API**: MSC GeoMet WMS at `https://geo.weather.gc.ca/geomet`
 - **Method**: WMS 1.1.1 `GetFeatureInfo` requests for point values at each location
 - **Format**: GeoJSON response (`application/json`)
 
-### WMS Layer Names (Confirmed Working)
+#### WMS Layer Names (Confirmed Working)
 
 | Variable | Layer ID | Response Property | Raw Units | Display Units |
 |----------|----------|-------------------|-----------|---------------|
@@ -42,7 +46,7 @@ A static web app for local wingfoilers in Howe Sound that displays high-resoluti
 
 **Note**: The `PN` layer is a contour/isoline layer (not a raster like TT/NT), so it returns the pressure value in the `pixel` property with an `ID` field for contour index. The `HRDPS.CONTINENTAL_PRMSL` layer does **not** exist on GeoMet.
 
-### WMS Query Pattern
+#### WMS Query Pattern
 
 ```
 GET https://geo.weather.gc.ca/geomet?
@@ -61,60 +65,21 @@ GET https://geo.weather.gc.ca/geomet?
 
 **Important**: Uses WMS **1.1.1** (not 1.3.0) to avoid the EPSG:4326 axis-order ambiguity. In WMS 1.1.1, BBOX is always `minlon,minlat,maxlon,maxlat` and uses `SRS`/`X`/`Y` parameters (not `CRS`/`I`/`J`).
 
-### Example GeoMet Responses
+### 2. Tide Predictions (CHS)
 
-**Temperature (TT) — raster layer:**
-```json
-{
-  "type": "FeatureCollection",
-  "layer": "HRDPS.CONTINENTAL_TT",
-  "features": [{
-    "type": "Feature",
-    "properties": {
-      "value": 9.2276554,
-      "class": "5 10",
-      "title_en": "HRDPS.CONTINENTAL - Air temperature at 2m above ground [°C]",
-      "time": "2026-02-10T22:00:00Z",
-      "dim_reference_time": "2026-02-10T18:00:00Z"
-    }
-  }]
-}
-```
+- **Source**: Canadian Hydrographic Service (CHS) predicted water levels
+- **Station**: Squamish Inner (07811), lat 49.695, lon -123.155
+- **Data**: Static CSV file (`07811_data.csv`) with predicted water levels (wlp) at 15-minute intervals
+- **Time Range**: 2026/01/01 – 2029/02/28 in Pacific Time
+- **Format**: CSV with 7 header rows, then `YYYY/MM/DD HH:MM,value` data rows (metres)
+- **Display**: Daytime hours only (7:00–21:00 PT), today + tomorrow
 
-**Pressure (PN) — contour layer:**
-```json
-{
-  "type": "FeatureCollection",
-  "name": "HRDPS.CONTINENTAL_PN",
-  "features": [{
-    "type": "Feature",
-    "properties": { "ID": 3, "pixel": 101740.0 },
-    "geometry": { "type": "LineString", "coordinates": [...] }
-  }]
-}
-```
+### 3. Marine Forecast (Environment Canada RSS)
 
-### PHP Proxy Architecture
-
-Since the frontend can't parse GRIB2 and CORS may block direct GeoMet requests, a PHP proxy handles all data fetching:
-
-1. **Endpoint**: `api/forecast.php` — returns cached JSON forecast data
-2. **Caching**: Results cached as `api/cache/forecast_latest.json` (3-hour TTL)
-3. **Batch Fetch**: On cache miss, fetches all variables × locations × forecast hours in one batch
-4. **Model Run Detection**: Selects latest available run based on UTC hour and data availability delay (~4–5 h)
-5. **Unit Conversion**: Pa→hPa (pressure), fraction→% (cloud), K→°C (temperature, if needed)
-6. **HTTP**: Uses cURL when available, falls back to `file_get_contents`
-7. **Debug Endpoints**:
-   - `?debug=1` — test one request per variable, show raw GeoMet responses
-   - `?debug=layers` — probe candidate pressure layer names to find the correct one
-
-### Time Handling
-
-- HRDPS model runs at 00Z, 06Z, 12Z, 18Z
-- Daytime display: 07:00–21:00 Pacific Time
-- PST (Nov–Mar): PT = UTC−8, so 07–21 PT = 15–05Z (next day)
-- PDT (Mar–Nov): PT = UTC−7, so 07–21 PT = 14–04Z (next day)
-- Frontend displays hour labels in Pacific Time
+- **Source**: EC Atom RSS feed for Howe Sound marine area 06400
+- **URL**: `https://weather.gc.ca/rss/marine/06400_e.xml`
+- **Sections**: Warnings, Forecast (near-term winds), Weather & Visibility, Extended Forecast
+- **Caching**: 1-hour TTL via PHP proxy
 
 ## Technical Architecture
 
@@ -124,16 +89,21 @@ Since the frontend can't parse GRIB2 and CORS may block direct GeoMet requests, 
 - **UI Library**: Chakra UI v2 (layout, theming, dark/light mode)
 - **Charts**: Recharts (AreaChart with tooltips, legends, series toggling)
 - **Base Path**: Vite `base: '/wind/'` — all asset URLs prefixed for subdirectory deployment
-- **API Path**: Uses `import.meta.env.BASE_URL + 'api/forecast.php'` → `/wind/api/forecast.php`
-- **Code Splitting**: Separate chunks for vendor (React), chakra, and charts (~244 KB gzipped total)
-- **Fallback**: Client-side demo data generated if API returns an error
+- **API Paths**: Uses `import.meta.env.BASE_URL` prefix for all endpoints
+- **Code Splitting**: Separate chunks for vendor (React), chakra, and charts
+- **Fallback**: Client-side demo data generated if HRDPS API returns an error
+- **Multi-day Pagination**: Shared `selectedDate` state synchronizes all charts with `< 11 Feb >` navigation
+- **Mobile Optimized**: Reduced chart margins and hidden Y-axis labels on small screens
 
 ### Backend (PHP Proxy)
 
 - **Runtime**: PHP 7.4 on Netfirms (Debian)
-- **Purpose**: Fetch, cache, and serve HRDPS forecast data as JSON
+- **Endpoints**:
+  - `api/forecast.php` — HRDPS forecast data (3-hour cache)
+  - `api/marine.php` — EC marine forecast RSS parser (1-hour cache)
+  - `api/tide.php` — CHS tide predictions from CSV (no cache, static data)
 - **Storage**: File-based JSON cache (no MySQL required)
-- **CORS**: Proxy eliminates CORS issues with GeoMet
+- **CORS**: Proxy eliminates CORS issues with GeoMet and weather.gc.ca
 
 ### Hosting: Netfirms
 
@@ -146,16 +116,19 @@ Since the frontend can't parse GRIB2 and CORS may block direct GeoMet requests, 
 
 ### On Page Load
 
-1. Frontend requests `/wind/api/forecast.php`
-2. PHP proxy checks cache; if fresh (<3h), returns cached data
-3. If stale, proxy fetches latest HRDPS data from GeoMet WMS, caches, returns
-4. Frontend renders three area charts (pressure, temperature, cloud cover)
+1. Frontend requests `/wind/api/forecast.php` for HRDPS data
+2. Frontend requests `/wind/api/tide.php` for tide predictions
+3. Frontend requests `/wind/api/marine.php` for marine forecast text
+4. PHP proxies check caches; if fresh, return cached data
+5. If stale, proxies fetch fresh data from respective sources
+6. Frontend renders all charts and marine forecast sections
 
-### Charts
+### HRDPS Charts
 
 - **Three stacked area charts**: one each for pressure (hPa), temperature (°C), cloud cover (%)
+- **Multi-day pagination**: `< prev | 11 Feb | next >` navigation on each chart, synchronized
 - **X-axis**: Time from 07:00 to 21:00 Pacific Time, labeled hourly
-- **Y-axis**: Appropriate scale per variable with units
+- **Y-axis**: Appropriate scale per variable with units (hidden on mobile)
 - **Series**: Each location is a separate series with distinct color
 - **Colors**: Gradient from light to dark representing coast → interior:
   - Pam Rocks: Light blue (`#63B3ED`)
@@ -165,44 +138,57 @@ Since the frontend can't parse GRIB2 and CORS may block direct GeoMet requests, 
 - **Tooltips**: Show exact values on hover
 - **Legend**: Clickable tags to toggle series visibility
 
+### Tide Chart
+
+- **Single area chart** for Squamish Inner predicted water level (metres)
+- **15-minute resolution** for smooth tide curve
+- **Same date pagination** as HRDPS charts (synchronized)
+- **X-axis**: 7:00–21:00 PT with hourly ticks
+- **Y-axis**: Water level in metres (hidden on mobile)
+- **Color**: Blue (`#3182CE` light / `#63B3ED` dark)
+
+### Marine Forecast
+
+- **Text display** of EC marine forecast for Howe Sound (area 06400)
+- **Sections** displayed in order: Warnings, Forecast, Winds, Weather & Visibility, Extended Forecast
+- **Formatting**: Day names bolded, wind sentences split to individual lines, warning notices highlighted
+- **Link**: "View full forecast" link to weather.gc.ca marine page
+
 ### UI Layout
 
-- **Header**: App title, subtitle explaining katabatic/anabatic focus, last update time, disclaimer
-- **Charts**: Three charts stacked vertically, each with title and legend
+- **Header**: App title, subtitle explaining katabatic/anabatic focus, dark/light toggle
+- **Model Info**: HRDPS badge, model run time, last updated timestamp, demo data warning
+- **HRDPS Charts**: Three charts stacked vertically, each with title, legend, and date nav
+- **Tide Chart**: Below HRDPS charts, same card styling
+- **Marine Forecast**: Below tide chart, card with sectioned text forecast
 - **Dark/Light Mode**: Toggle switch using Chakra's `useColorMode` (defaults to dark)
-- **Responsive**: Charts stack on mobile, appropriate sizing on desktop
-- **Footer**: Data attribution (ECCC/MSC), disclaimer
+- **Responsive**: Charts stack on mobile with reduced margins and hidden Y-axis
+- **Footer**: Data attribution (ECCC/MSC), disclaimer, usage notes
 
 ### Data Refresh
 
-- Cache TTL: 3 hours (aligns with ~4 model runs/day)
+- HRDPS cache TTL: 3 hours (aligns with ~4 model runs/day)
+- Marine forecast cache TTL: 1 hour
+- Tide data: Static CSV, no refresh needed
 - Frontend shows "Last updated: {timestamp}" from cached data
 - Error state: "Using Demo Data" warning with simulated values
-
-## Color & Design
-
-- Use Chakra UI default theme with blue color scheme
-- Semi-transparent area fills (opacity ~0.3) with solid stroke lines
-- Clean, minimal dashboard layout
-- Readable fonts, good contrast for outdoor/mobile viewing
-
-## Non-Functional Requirements
-
-- **Performance**: Page loads in <2 seconds; charts render ~15 data points each
-- **Accessibility**: Chakra accessible components, sufficient color contrast
-- **Maintainability**: Modular React components, documented PHP proxy with debug endpoints
-- **Security**: No sensitive data; proxy validates inputs; no SQL injection surface
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/App.jsx` | Main layout: header, charts, footer, dark/light toggle |
-| `src/ForecastChart.jsx` | Reusable area chart component with series toggling |
-| `src/useForecastData.js` | Data fetching hook with demo fallback |
+| `src/App.jsx` | Main layout: header, charts, tide, marine forecast, footer |
+| `src/ForecastChart.jsx` | Reusable HRDPS area chart with series toggling and date nav |
+| `src/TideChart.jsx` | Tide prediction area chart with date nav |
+| `src/MarineForecast.jsx` | EC marine forecast text display |
+| `src/useForecastData.js` | HRDPS data fetching hook with demo fallback |
 | `src/constants.js` | Locations, variables, API endpoint config |
 | `src/theme.js` | Chakra UI theme (dark mode default) |
 | `api/forecast.php` | PHP proxy: WMS queries, caching, unit conversion, debug |
+| `api/marine.php` | PHP proxy: EC RSS feed parser, caching |
+| `api/tide.php` | PHP endpoint: CSV reader for tide predictions |
+| `07811_data.csv` | CHS tide prediction data (Squamish Inner, 2026–2029) |
+| `07811_metadata.csv` | CHS station metadata and tidal datums |
 | `vite.config.js` | Build config with `/wind/` base path and code splitting |
 
 ## Out of Scope
