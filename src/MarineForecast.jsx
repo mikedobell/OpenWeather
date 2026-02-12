@@ -28,17 +28,37 @@ function ForecastSection({ sectionKey, section }) {
   if (!section || !config) return null;
 
   // Parse the content into lines, bolding day names
-  const lines = section.content.split('\n').filter((l) => l.trim() !== '');
+  const rawLines = section.content.split('\n').filter((l) => l.trim() !== '');
 
   // Extract the "Issued..." line if present
   let issuedLine = null;
-  const contentLines = [];
-  for (const line of lines) {
+  let contentLines = [];
+  for (const line of rawLines) {
     if (/^Issued\b/i.test(line.trim())) {
       issuedLine = line.trim();
     } else {
       contentLines.push(line.trim());
     }
+  }
+
+  // For winds section: split dense paragraphs at sentence boundaries
+  // so each "Wind ..." sentence gets its own line
+  if (sectionKey === 'winds') {
+    const expanded = [];
+    for (const line of contentLines) {
+      // Split on ". Wind " to separate wind period sentences
+      const parts = line.split(/\.\s+(?=Wind\s)/i);
+      for (let j = 0; j < parts.length; j++) {
+        let part = parts[j].trim();
+        if (!part) continue;
+        // Re-add trailing period if it was removed by the split
+        if (j < parts.length - 1 && !part.endsWith('.')) {
+          part += '.';
+        }
+        expanded.push(part);
+      }
+    }
+    contentLines = expanded;
   }
 
   return (
