@@ -10,7 +10,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
           chakra: ['@chakra-ui/react', '@emotion/react', '@emotion/styled', 'framer-motion'],
           charts: ['recharts'],
         },

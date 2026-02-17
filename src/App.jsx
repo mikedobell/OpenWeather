@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Box,
   Container,
@@ -20,11 +20,13 @@ import {
   Link,
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
-import ForecastChart from './ForecastChart';
-import TideChart from './TideChart';
-import MarineForecast from './MarineForecast';
 import { VARIABLES } from './constants';
 import useForecastData from './useForecastData';
+
+// Lazy-load chart components so Recharts (382 KB) downloads in parallel with API data
+const ForecastChart = lazy(() => import('./ForecastChart'));
+const TideChart = lazy(() => import('./TideChart'));
+const MarineForecast = lazy(() => import('./MarineForecast'));
 
 function Header() {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -182,26 +184,28 @@ export default function App() {
             </VStack>
           </Flex>
         ) : (
-          <Box>
-            {VARIABLES.map((variable) => (
-              <ForecastChart
-                key={variable.id}
-                variable={variable}
-                data={data}
-                dates={dates}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-              />
-            ))}
+          <Suspense fallback={<Spinner size="lg" color="blue.400" />}>
+            <Box>
+              {VARIABLES.map((variable) => (
+                <ForecastChart
+                  key={variable.id}
+                  variable={variable}
+                  data={data}
+                  dates={dates}
+                  selectedDate={selectedDate}
+                  onDateChange={setSelectedDate}
+                />
+              ))}
 
-            <TideChart
-                dates={dates}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-              />
+              <TideChart
+                  dates={dates}
+                  selectedDate={selectedDate}
+                  onDateChange={setSelectedDate}
+                />
 
-            <MarineForecast />
-          </Box>
+              <MarineForecast />
+            </Box>
+          </Suspense>
         )}
       </Container>
 
