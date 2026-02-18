@@ -6,17 +6,17 @@ A static web app for local windsports enthusiasts on the Sea to Sky corridor tha
 
 Forecast data come from the HRDPS (~2.5 km resolution, 48 h ahead, updated 4×/day). Only daytime hours (07:00–21:00 Pacific Time) are displayed. Multi-day pagination allows viewing today and tomorrow's forecasts. The interface uses Chakra UI for styling and Recharts for charting.
 
-**Live site**: https://www.dobell.ca/wind/
+**Live site**: Firebase Hosting (previously at https://www.dobell.ca/wind/)
 
 ## Goals
 
 - **Accurate Local Forecast**: Provide windsports enthusiasts with HRDPS pressure, temperature, and cloud cover data at Sea to Sky locations to predict katabatic/anabatic winds.
-- **Automatic Updates**: Refresh data when new HRDPS runs are published (~4×/day). PHP proxy caches results server-side.
+- **Automatic Updates**: Pre-fetch data on schedule via Cloud Scheduler when new HRDPS runs are published (~4×/day). Cached in Firestore for instant user access.
 - **Clear Visualization**: Interactive area charts (Recharts) with hover tooltips, series toggling, and multi-day pagination.
 - **Tide Information**: Display predicted tide levels for Squamish Inner from CHS data.
 - **Marine Forecast**: Show the latest EC marine forecast text for Howe Sound (winds, weather, extended).
 - **Local Focus**: Four fixed sites only; no user accounts required.
-- **Performance**: Static HTML/JS frontend loads quickly; PHP proxy handles data fetching and caching.
+- **Performance**: Static HTML/JS frontend served from Firebase CDN; Cloud Functions serve pre-cached data from Firestore for instant response.
 
 ## Fixed Locations (Coast → Interior Transect)
 
@@ -79,7 +79,7 @@ GET https://geo.weather.gc.ca/geomet?
 - **Source**: EC Atom RSS feed for Howe Sound marine area 06400
 - **URL**: `https://weather.gc.ca/rss/marine/06400_e.xml`
 - **Sections**: Warnings, Forecast (near-term winds), Weather & Visibility, Extended Forecast
-- **Caching**: 1-hour TTL via PHP proxy
+- **Caching**: Pre-fetched every 3 hours via Cloud Scheduler, stored in Firestore
 
 ## Technical Architecture
 
@@ -88,39 +88,42 @@ GET https://geo.weather.gc.ca/geomet?
 - **Framework**: React 18 + Vite (builds to static HTML/JS/CSS)
 - **UI Library**: Chakra UI v2 (layout, theming, dark/light mode)
 - **Charts**: Recharts (AreaChart with tooltips, legends, series toggling)
-- **Base Path**: Vite `base: '/wind/'` — all asset URLs prefixed for subdirectory deployment
-- **API Paths**: Uses `import.meta.env.BASE_URL` prefix for all endpoints
-- **Code Splitting**: Separate chunks for vendor (React), chakra, and charts
+- **Lazy Loading**: ForecastChart, TideChart, MarineForecast loaded via React.lazy() to reduce initial bundle
+- **Base Path**: Vite `base: '/'` — served from Firebase CDN root
+- **Code Splitting**: Separate chunks for vendor (React), chakra, and charts (deferred)
 - **Fallback**: Client-side demo data generated if HRDPS API returns an error
 - **Multi-day Pagination**: Shared `selectedDate` state synchronizes all charts with `< 11 Feb >` navigation
 - **Mobile Optimized**: Reduced chart margins and hidden Y-axis labels on small screens
 
-### Backend (PHP Proxy)
+### Backend (Firebase Cloud Functions)
 
-- **Runtime**: PHP 7.4 on Netfirms (Debian)
-- **Endpoints**:
-  - `api/forecast.php` — HRDPS forecast data (3-hour cache)
-  - `api/marine.php` — EC marine forecast RSS parser (1-hour cache)
-  - `api/tide.php` — CHS tide predictions from CSV (no cache, static data)
-- **Storage**: File-based JSON cache (no MySQL required)
-- **CORS**: Proxy eliminates CORS issues with GeoMet and weather.gc.ca
+- **Runtime**: Node.js 20 on Firebase Cloud Functions
+- **HTTP Endpoints** (rewrites from `/api/*`):
+  - `forecast` — serves pre-fetched HRDPS data from Firestore cache
+  - `marine` — serves pre-fetched EC marine forecast from Firestore cache
+  - `tide` — reads bundled CSV, returns JSON (no cache needed)
+- **Scheduled Functions** (Cloud Scheduler):
+  - `scheduledForecastFetch` — runs 4×/day (UTC 4,10,16,22), batches ~180 parallel WMS requests to GeoMet, stores in Firestore
+  - `scheduledMarineFetch` — runs every 3 hours, fetches EC RSS, parses XML, stores in Firestore
+- **Cache**: Firestore `cache/forecast` and `cache/marine` documents
+- **CORS**: Functions set `Access-Control-Allow-Origin: *` headers
 
-### Hosting: Netfirms
+### Hosting: Firebase
 
-- Debian, PHP 7.4.33, MySQL 5.7 (MySQL reserved for future use)
-- Deployed to `/wind/` subdirectory at `www.dobell.ca`
-- `.htaccess` with `RewriteBase /wind/` for SPA routing
-- No Node.js on server; build locally, deploy `dist/` output
+- **CDN**: Firebase Hosting serves static `dist/` directory globally
+- **Rewrites**: `/api/forecast`, `/api/marine`, `/api/tide` → Cloud Functions
+- **SPA Fallback**: All other routes → `index.html`
+- **Deploy**: `firebase deploy` or GitHub Actions auto-deploy on push to main
 
 ## Functional Requirements
 
 ### On Page Load
 
-1. Frontend requests `/wind/api/forecast.php` for HRDPS data
-2. Frontend requests `/wind/api/tide.php` for tide predictions
-3. Frontend requests `/wind/api/marine.php` for marine forecast text
-4. PHP proxies check caches; if fresh, return cached data
-5. If stale, proxies fetch fresh data from respective sources
+1. Frontend requests `/api/forecast` for HRDPS data (served from Firestore cache)
+2. Frontend requests `/api/tide` for tide predictions (served from bundled CSV)
+3. Frontend requests `/api/marine` for marine forecast text (served from Firestore cache)
+4. Cloud Functions read pre-cached data from Firestore — instant response
+5. Fallback: if Firestore cache empty, functions fetch live data and populate cache
 6. Frontend renders all charts and marine forecast sections
 
 ### HRDPS Charts
@@ -167,9 +170,9 @@ GET https://geo.weather.gc.ca/geomet?
 
 ### Data Refresh
 
-- HRDPS cache TTL: 3 hours (aligns with ~4 model runs/day)
-- Marine forecast cache TTL: 1 hour
-- Tide data: Static CSV, no refresh needed
+- **HRDPS**: Pre-fetched 4×/day by Cloud Scheduler (UTC 4,10,16,22), stored in Firestore
+- **Marine forecast**: Pre-fetched every 3 hours by Cloud Scheduler
+- **Tide data**: Static CSV bundled with Cloud Function, no refresh needed
 - Frontend shows "Last updated: {timestamp}" from cached data
 - Error state: "Using Demo Data" warning with simulated values
 
@@ -184,12 +187,15 @@ GET https://geo.weather.gc.ca/geomet?
 | `src/useForecastData.js` | HRDPS data fetching hook with demo fallback |
 | `src/constants.js` | Locations, variables, API endpoint config |
 | `src/theme.js` | Chakra UI theme (dark mode default) |
-| `api/forecast.php` | PHP proxy: WMS queries, caching, unit conversion, debug |
-| `api/marine.php` | PHP proxy: EC RSS feed parser, caching |
-| `api/tide.php` | PHP endpoint: CSV reader for tide predictions |
-| `07811_data.csv` | CHS tide prediction data (Squamish Inner, 2026–2029) |
-| `07811_metadata.csv` | CHS station metadata and tidal datums |
-| `vite.config.js` | Build config with `/wind/` base path and code splitting |
+| `functions/index.js` | Cloud Functions: HTTP endpoints + scheduled pre-fetch |
+| `functions/package.json` | Cloud Functions dependencies |
+| `functions/07811_data.csv` | CHS tide data bundled with Cloud Function |
+| `firebase.json` | Firebase project config: hosting, rewrites, functions |
+| `.firebaserc` | Firebase project ID reference |
+| `vite.config.js` | Build config with `/` base path and code splitting |
+| `api/forecast.php` | Legacy PHP proxy (retained for reference) |
+| `api/marine.php` | Legacy PHP proxy (retained for reference) |
+| `api/tide.php` | Legacy PHP endpoint (retained for reference) |
 
 ## Out of Scope
 
