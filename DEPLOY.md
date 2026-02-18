@@ -1,4 +1,4 @@
-# Deployment Guide — Sea to Sky Wind Forecast
+# OpenWeather.ca — Deployment Guide
 
 ## Architecture
 

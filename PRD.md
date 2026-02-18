@@ -1,4 +1,4 @@
-# Sea to Sky Wind Forecast Web App — PRD
+# OpenWeather.ca — PRD
 
 ## Overview
 

@@ -39,7 +39,7 @@ function Header() {
         <Flex justify="space-between" align="center">
           <Box>
             <Heading size={{ base: 'sm', md: 'md' }} color="blue.400">
-              Howe Sound Forecast Gradients
+              OpenWeather.ca
             </Heading>
             <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.500">
               Katabatic &amp; Anabatic Flow Indicators
@@ -138,7 +138,7 @@ function Footer() {
             </Link>
           </Text>
           <Text fontSize="xs" color="gray.500" fontStyle="italic">
-            A homemade project for S2S windsports, which may be broken from time to time. Please forgive any jank.
+            A homemade project for Sea to Sky windsports, which may be broken from time to time. Please forgive any jank.
           </Text>
           <Text fontSize="xs" color="gray.500">
             Charts show daytime hours (7 AM – 9 PM Pacific). Use arrows to page between forecast days.
