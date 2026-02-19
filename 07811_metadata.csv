@@ -1,0 +1,50 @@
+Station Name - Nom de la station,Squamish Inner
+Station Code - Code de la station,07811
+Latitude - Latitude,49.695
+Longitude - Longitude,-123.155
+Time Zone - Fuseau horaire,Canada/Pacific
+Alternative Name - Nom alternatif,
+Resolution - Résolution,1 minute - 1 minute
+Active - Actif,false
+Type - Type,Temporary - Temporaire
+Tidal Regime - Régime tidal,true
+
+Datums - Datums
+
+Heights - Hauteurs
+
+Code - Code,HHWLT
+Name - Nom,Higher High Water Large Tide - Pleine Mer Supérieure Grande Marée
+Value - Valeur,5.09
+
+Code - Code,MWL
+Name - Nom,Mean Water Level - Niveau Moyen de l'Eau
+Value - Valeur,3.14
+
+Code - Code,LLWLT
+Name - Nom,Lower Low Water Large Tide - Basse Mer Inférieure Grande Marée
+Value - Valeur,0.048
+
+Code - Code,MHHW
+Name - Nom,Mean Higher High Water (Higher High Water Mean Tide) - Hauteur moyenne des pleines mers supérieures (Pleine Mer Supérieure Marée Moyenne)
+Value - Valeur,4.526
+
+Code - Code,MLLW
+Name - Nom,Mean Lower Low Water (Lower Low Water Mean Tide) - Hauteur moyenne des basses mers inférieures (Basse Mer Inférieure Marée Moyenne)
+Value - Valeur,1.252
+
+Code - Code,HAT
+Name - Nom,Highest Astronomical Tide - Plus Haute Mer Astronomique
+Value - Valeur,5.155
+
+Code - Code,LAT
+Name - Nom,Lowest Astronomical Tide - Plus Basse Mer Astronomique
+Value - Valeur,-0.157
+
+Code - Code,MHW
+Name - Nom,Mean High Water (High Water Mean Tide) - Pleine Mer Moyenne
+Value - Valeur,4.245
+
+Code - Code,MLW
+Name - Nom,Mean Low Water (Low Water Mean Tide) - Basse Mer Moyenne
+Value - Valeur,2.127

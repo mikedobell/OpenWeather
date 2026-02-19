@@ -1,0 +1,7 @@
+node_modules/
+dist/
+api/cache/*.json
+functions/node_modules/
+.firebase/
+.DS_Store
+*.log
