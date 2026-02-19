@@ -28,7 +28,7 @@ Firebase Hosting (CDN)          Cloud Functions (Node.js 20)
 ### 1. Create a Firebase project
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click **Add project** → name it (e.g., `s2s-forecast`)
+2. Click **Add project** → name it (e.g., `OpenWeather`)
 3. Disable Google Analytics (not needed) → **Create project**
 
 ### 2. Enable required services
@@ -44,19 +44,18 @@ In the Firebase Console for your project:
 ```bash
 # Login to Firebase
 firebase login
-
-# Set your project ID in .firebaserc
-# Edit .firebaserc and replace YOUR_FIREBASE_PROJECT_ID with your actual project ID
 ```
 
-The `.firebaserc` file should look like:
+The `.firebaserc` file is already configured with the project ID for this deployment:
 ```json
 {
   "projects": {
-    "default": "s2s-forecast"
+    "default": "openweather-826fc"
   }
 }
 ```
+
+If you are deploying your own fork to a different Firebase project, replace `openweather-826fc` with your own project's ID (found in Firebase Console → Project Settings → Project ID).
 
 ### 4. Set Firestore security rules
 
@@ -207,7 +206,7 @@ cd functions && firebase emulators:start --only functions,firestore
 | Forecast data empty | Check Firestore `cache/forecast` document exists. Manually trigger `scheduledForecastFetch` |
 | Marine forecast missing | Check Firestore `cache/marine`. weather.gc.ca may be temporarily down |
 | Tide data not found | Ensure `07811_data.csv` is in `functions/` directory |
-| Deploy fails | Run `firebase login` and check `.firebaserc` has correct project ID |
+| Deploy fails | Run `firebase login` and confirm `.firebaserc` project ID matches your Firebase project |
 | Scheduler not running | Check Cloud Scheduler in Google Cloud Console → verify jobs are enabled |
 | CORS errors | The functions set `Access-Control-Allow-Origin: *` headers |
 
