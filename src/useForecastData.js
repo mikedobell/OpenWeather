@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { API_ENDPOINT } from './constants';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 export default function useForecastData() {
   const [data, setData] = useState(null);
@@ -13,11 +14,9 @@ export default function useForecastData() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(API_ENDPOINT);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      const json = await response.json();
+      const snap = await getDoc(doc(db, 'cache', 'forecast'));
+      if (!snap.exists()) throw new Error('Forecast cache not yet populated');
+      const json = snap.data();
 
       if (json.error) {
         throw new Error(json.error);
@@ -30,7 +29,7 @@ export default function useForecastData() {
     } catch (err) {
       console.error('Failed to fetch forecast data:', err);
       setError(err.message);
-      // Fall back to demo data if API unavailable
+      // Fall back to demo data if Firestore unavailable
       const demo = generateDemoData();
       setData(demo.forecast);
       setDates(demo.dates);

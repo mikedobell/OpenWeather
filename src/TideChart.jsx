@@ -20,7 +20,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { TIDE_API_ENDPOINT } from './constants';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 function formatHour(val) {
   const h = Math.floor(val);
@@ -80,9 +81,9 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(TIDE_API_ENDPOINT);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.json();
+      const snap = await getDoc(doc(db, 'cache', 'tide'));
+      if (!snap.exists()) throw new Error('Tide cache not yet populated');
+      const json = snap.data();
       if (json.error) throw new Error(json.error);
       setData(json.data);
       setTideDates(json.dates || []);

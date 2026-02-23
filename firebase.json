@@ -7,30 +7,11 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
-        "source": "/api/forecast",
-        "function": "forecast"
-      },
-      {
-        "source": "/api/marine",
-        "function": "marine"
-      },
-      {
-        "source": "/api/tide",
-        "function": "tide"
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
     ],
     "headers": [
-      {
-        "source": "/api/**",
-        "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=1800" },
-          { "key": "Access-Control-Allow-Origin", "value": "*" }
-        ]
-      },
       {
         "source": "**/*.@(js|css)",
         "headers": [
