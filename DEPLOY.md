@@ -59,21 +59,9 @@ If you are deploying your own fork to a different Firebase project, replace `ope
 
 ### 4. Set Firestore security rules
 
-In Firebase Console → Firestore → Rules, set:
+The rules are defined in `firestore.rules` at the project root and deployed automatically by `firebase deploy`. No manual step needed.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /cache/{document} {
-      allow read: if false;  // Only Cloud Functions access this
-      allow write: if false;
-    }
-  }
-}
-```
-
-(Cloud Functions use the Admin SDK which bypasses these rules.)
+(Cloud Functions use the Admin SDK, which bypasses security rules. The rules deny all direct client access to the `cache` collection.)
 
 ## Deploy
 
@@ -96,6 +84,7 @@ firebase deploy
 This deploys:
 - **Hosting**: `dist/` directory → Firebase CDN
 - **Functions**: `functions/` directory → Cloud Functions
+- **Firestore rules**: `firestore.rules` → Firestore security rules
 - **Scheduled functions**: Automatically creates Cloud Scheduler jobs
 
 ### Deploy from GitHub (recommended)
@@ -177,9 +166,10 @@ firebase functions:log
 ### Manually trigger a pre-fetch
 
 ```bash
-# From Firebase Console → Functions → scheduledForecastFetch → click "Run now"
-# Or use gcloud CLI:
-gcloud scheduler jobs run firebase-schedule-scheduledForecastFetch --location=us-central1
+# From Google Cloud Console → Cloud Scheduler → force run the job
+# Or use gcloud CLI (note: job name includes the region suffix):
+gcloud scheduler jobs run firebase-schedule-scheduledForecastFetch-us-central1 \
+  --location=us-central1 --project=<your-project-id>
 ```
 
 ### Check cached data
@@ -203,7 +193,8 @@ cd functions && firebase emulators:start --only functions,firestore
 | Problem | Fix |
 |---------|-----|
 | Functions return 500 | Check `firebase functions:log` for errors |
-| Forecast data empty | Check Firestore `cache/forecast` document exists. Manually trigger `scheduledForecastFetch` |
+| Forecast data empty | Check Firestore `cache/forecast` document exists. Manually trigger `scheduledForecastFetch` via Cloud Scheduler |
+| Firestore gRPC errors in logs | Firestore database not created yet — go to Firebase Console → Build → Firestore Database → Create database → choose `us-central1` |
 | Marine forecast missing | Check Firestore `cache/marine`. weather.gc.ca may be temporarily down |
 | Tide data not found | Ensure `07811_data.csv` is in `functions/` directory |
 | Deploy fails | Run `firebase login` and confirm `.firebaserc` project ID matches your Firebase project |
