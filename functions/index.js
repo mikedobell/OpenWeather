@@ -365,50 +365,81 @@ function parseTideData(days = 2) {
 }
 
 // ============================================================
+// Helper: read/write Firestore cache (tolerates missing DB)
+// ============================================================
+
+async function readCache(key) {
+  try {
+    const doc = await db.collection("cache").doc(key).get();
+    return doc.exists ? doc.data() : null;
+  } catch (err) {
+    console.warn(`Firestore read failed for "${key}":`, err.message);
+    return null;
+  }
+}
+
+async function writeCache(key, data) {
+  try {
+    await db.collection("cache").doc(key).set(data);
+  } catch (err) {
+    console.warn(`Firestore write failed for "${key}":`, err.message);
+  }
+}
+
+// ============================================================
 // Cloud Functions: HTTP Endpoints
 // ============================================================
 
-// Forecast endpoint — serves pre-fetched data from Firestore
-exports.forecast = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Cache-Control", "public, max-age=1800");
+// Forecast endpoint — serves cached data, falls back to live GeoMet fetch
+exports.forecast = functions
+  .runWith({ timeoutSeconds: 300, memory: "512MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cache-Control", "public, max-age=1800");
 
-  try {
-    const doc = await db.collection("cache").doc("forecast").get();
-    if (doc.exists) {
-      return res.json(doc.data());
+    try {
+      // Try Firestore cache first (non-fatal if unavailable)
+      const cached = await readCache("forecast");
+      if (cached) {
+        return res.json(cached);
+      }
+
+      // Cache miss or Firestore unavailable — fetch live from GeoMet
+      const data = await fetchAllForecastData();
+      await writeCache("forecast", data);
+      return res.json(data);
+    } catch (err) {
+      console.error("Forecast error:", err);
+      return res.status(500).json({ error: err.message });
     }
-    // Fallback: fetch live (shouldn't happen if scheduler is running)
-    const data = await fetchAllForecastData();
-    await db.collection("cache").doc("forecast").set(data);
-    return res.json(data);
-  } catch (err) {
-    console.error("Forecast error:", err);
-    return res.status(500).json({ error: err.message });
-  }
-});
+  });
 
-// Marine forecast endpoint — serves pre-fetched data from Firestore
-exports.marine = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Cache-Control", "public, max-age=1800");
+// Marine forecast endpoint — serves cached data, falls back to live fetch
+exports.marine = functions
+  .runWith({ timeoutSeconds: 120, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cache-Control", "public, max-age=1800");
 
-  try {
-    const doc = await db.collection("cache").doc("marine").get();
-    if (doc.exists) {
-      return res.json(doc.data());
+    try {
+      const cached = await readCache("marine");
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const data = await fetchMarineForecast();
+      await writeCache("marine", data);
+      return res.json(data);
+    } catch (err) {
+      console.error("Marine error:", err);
+      return res.status(500).json({ error: err.message });
     }
-    const data = await fetchMarineForecast();
-    await db.collection("cache").doc("marine").set(data);
-    return res.json(data);
-  } catch (err) {
-    console.error("Marine error:", err);
-    return res.status(500).json({ error: err.message });
-  }
-});
+  });
 
 // Tide endpoint — reads local CSV (bundled with function)
-exports.tide = functions.https.onRequest(async (req, res) => {
+exports.tide = functions
+  .runWith({ timeoutSeconds: 30 })
+  .https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Cache-Control", "public, max-age=3600");
 
@@ -426,16 +457,16 @@ exports.tide = functions.https.onRequest(async (req, res) => {
 // Cloud Functions: Scheduled Pre-fetch
 // ============================================================
 
-// Runs every 6 hours to pre-fetch HRDPS data
-// Schedule: every 6 hours (covers all 4 model runs with buffer)
-exports.scheduledForecastFetch = functions.pubsub
-  .schedule("0 4,10,16,22 * * *") // UTC: 4,10,16,22 = PT: 8pm,2am,8am,2pm
+// Runs every 6 hours (PT) to pre-fetch HRDPS data
+exports.scheduledForecastFetch = functions
+  .runWith({ timeoutSeconds: 540, memory: "512MB" })
+  .pubsub.schedule("0 4,10,16,22 * * *") // 4am, 10am, 4pm, 10pm PT
   .timeZone("America/Vancouver")
   .onRun(async () => {
     console.log("Scheduled forecast fetch starting...");
     try {
       const data = await fetchAllForecastData();
-      await db.collection("cache").doc("forecast").set(data);
+      await writeCache("forecast", data);
       console.log(`Forecast fetched: ${data.fetch_stats.total} requests, ${data.fetch_stats.errors} errors`);
     } catch (err) {
       console.error("Scheduled forecast fetch failed:", err);
@@ -444,14 +475,15 @@ exports.scheduledForecastFetch = functions.pubsub
   });
 
 // Runs every 3 hours to update marine forecast
-exports.scheduledMarineFetch = functions.pubsub
-  .schedule("30 */3 * * *") // every 3 hours at :30
+exports.scheduledMarineFetch = functions
+  .runWith({ timeoutSeconds: 120 })
+  .pubsub.schedule("30 */3 * * *") // every 3 hours at :30
   .timeZone("America/Vancouver")
   .onRun(async () => {
     console.log("Scheduled marine forecast fetch starting...");
     try {
       const data = await fetchMarineForecast();
-      await db.collection("cache").doc("marine").set(data);
+      await writeCache("marine", data);
       console.log("Marine forecast updated");
     } catch (err) {
       console.error("Scheduled marine fetch failed:", err);
