@@ -7,7 +7,7 @@ const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: 'openweather-826fc.firebaseapp.com',
   projectId: 'openweather-826fc',
-  storageBucket: 'openweather-826fc.appspot.com',
+  storageBucket: 'openweather-826fc.firebasestorage.app',
   messagingSenderId: '499606156061',
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
