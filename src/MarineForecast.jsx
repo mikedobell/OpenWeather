@@ -9,7 +9,8 @@ import {
   Flex,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { MARINE_API_ENDPOINT } from './constants';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 const SECTION_CONFIG = {
   warnings: { label: 'Warnings', colorScheme: 'red' },
@@ -125,11 +126,9 @@ export default function MarineForecast() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(MARINE_API_ENDPOINT);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const json = await response.json();
+      const snap = await getDoc(doc(db, 'cache', 'marine'));
+      if (!snap.exists()) throw new Error('Marine cache not yet populated');
+      const json = snap.data();
       if (json.error) {
         throw new Error(json.error);
       }

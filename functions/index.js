@@ -471,6 +471,13 @@ exports.scheduledForecastFetch = functions
     } catch (err) {
       console.error("Scheduled forecast fetch failed:", err);
     }
+    try {
+      const tideData = parseTideData(2);
+      await writeCache("tide", tideData);
+      console.log("Tide data cached");
+    } catch (err) {
+      console.error("Scheduled tide cache failed:", err);
+    }
     return null;
   });
 

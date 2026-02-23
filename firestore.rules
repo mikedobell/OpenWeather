@@ -2,9 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /cache/{document} {
-      // Cloud Functions use the Admin SDK which bypasses these rules.
-      // No client-side access needed — deny all direct reads and writes.
-      allow read: if false;
+      // Cloud Functions write via Admin SDK (bypasses rules).
+      // Frontend reads directly — public read, no writes.
+      allow read: if true;
       allow write: if false;
     }
   }
