@@ -1,4 +1,4 @@
-const functions = require("firebase-functions");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const { XMLParser } = require("fast-xml-parser");
@@ -381,11 +381,12 @@ async function writeCache(key, data) {
 // ============================================================
 
 // Runs every 6 hours (PT) to pre-fetch HRDPS data
-exports.scheduledForecastFetch = functions
-  .runWith({ timeoutSeconds: 540, memory: "512MB" })
-  .pubsub.schedule("0 4,10,16,22 * * *") // 4am, 10am, 4pm, 10pm PT
-  .timeZone("America/Vancouver")
-  .onRun(async () => {
+exports.scheduledForecastFetch = onSchedule({
+  schedule: "0 4,10,16,22 * * *", // 4am, 10am, 4pm, 10pm PT
+  timeZone: "America/Vancouver",
+  timeoutSeconds: 540,
+  memory: "512MiB",
+}, async () => {
     console.log("Scheduled forecast fetch starting...");
     try {
       const data = await fetchAllForecastData();
@@ -405,11 +406,11 @@ exports.scheduledForecastFetch = functions
   });
 
 // Runs every 3 hours to update marine forecast
-exports.scheduledMarineFetch = functions
-  .runWith({ timeoutSeconds: 120 })
-  .pubsub.schedule("30 */3 * * *") // every 3 hours at :30
-  .timeZone("America/Vancouver")
-  .onRun(async () => {
+exports.scheduledMarineFetch = onSchedule({
+  schedule: "30 */3 * * *", // every 3 hours at :30
+  timeZone: "America/Vancouver",
+  timeoutSeconds: 120,
+}, async () => {
     console.log("Scheduled marine forecast fetch starting...");
     try {
       const data = await fetchMarineForecast();
