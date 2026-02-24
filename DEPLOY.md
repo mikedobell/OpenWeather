@@ -4,16 +4,15 @@
 
 ```
 Firebase Hosting (CDN)          Cloud Functions (Node.js 20)
-├── index.html                  ├── forecast — serves HRDPS JSON from Firestore cache
-├── assets/*.js, *.css          ├── marine   — serves EC marine forecast from Firestore cache
-└── /api/* → rewrites to ──────>├── tide     — reads bundled CSV, returns JSON
-    Cloud Functions             ├── scheduledForecastFetch — cron: pre-fetches HRDPS 4×/day
+├── index.html                  ├── scheduledForecastFetch — cron: pre-fetches HRDPS 4×/day
+└── assets/*.js, *.css          │     └── also caches tide CSV data
                                 └── scheduledMarineFetch   — cron: pre-fetches marine 4×/day
                                         │
                                         ▼
-                                   Firestore (cache)
-                                   ├── cache/forecast
-                                   └── cache/marine
+                                   Firestore (cache)          ◄─── React frontend
+                                   ├── cache/forecast              reads directly
+                                   ├── cache/marine                via Firebase SDK
+                                   └── cache/tide
 ```
 
 ## Prerequisites
@@ -61,7 +60,7 @@ If you are deploying your own fork to a different Firebase project, replace `ope
 
 The rules are defined in `firestore.rules` at the project root and deployed automatically by `firebase deploy`. No manual step needed.
 
-(Cloud Functions use the Admin SDK, which bypasses security rules. The rules deny all direct client access to the `cache` collection.)
+The rules allow public reads (the React frontend reads `cache/*` directly via the Firebase JS SDK) and block writes (Cloud Functions use the Admin SDK which bypasses rules entirely).
 
 ## Deploy
 
@@ -134,26 +133,27 @@ To set up the secret:
 
 Instead of fetching HRDPS data during user page loads:
 
-1. **`scheduledForecastFetch`** runs 4×/day via Cloud Scheduler (UTC 4, 10, 16, 22)
-   - Makes ~180 parallel WMS requests to GeoMet (batched 20 at a time)
+1. **`scheduledForecastFetch`** runs 4×/day via Cloud Scheduler (4am, 10am, 4pm, 10pm PT)
+   - Makes ~360 parallel WMS requests to GeoMet (batched 20 at a time)
    - Stores the complete forecast JSON in Firestore `cache/forecast`
+   - Also parses `07811_data.csv` and stores tide data in Firestore `cache/tide`
 2. **`scheduledMarineFetch`** runs every 3 hours
    - Fetches EC RSS feed, parses XML, stores in Firestore `cache/marine`
-3. When a user visits, the `forecast` and `marine` functions just read from Firestore — **instant response**
+3. When a user visits, the React app reads all three cache documents directly from Firestore via the Firebase JS SDK — **instant response, no Cloud Function invocation at page load**
 
 ### Request Flow
 
 ```
 User browser
   → Firebase CDN (static HTML/JS/CSS — ~140 KB gzip)
-  → /api/forecast → Cloud Function → reads Firestore cache → JSON
-  → /api/marine   → Cloud Function → reads Firestore cache → JSON
-  → /api/tide     → Cloud Function → reads bundled CSV → JSON
+  → Firebase JS SDK → Firestore cache/forecast → forecast JSON
+  → Firebase JS SDK → Firestore cache/marine   → marine JSON
+  → Firebase JS SDK → Firestore cache/tide     → tide JSON
 ```
 
 ### Tide Data
 
-The `07811_data.csv` file is bundled directly into the Cloud Function deployment (in `functions/07811_data.csv`). It's read from disk at function invocation time — no external fetch needed.
+The `07811_data.csv` file is bundled directly into the Cloud Function deployment (in `functions/07811_data.csv`). `scheduledForecastFetch` reads and parses it on each run, then caches the result in Firestore `cache/tide` — no external fetch needed.
 
 ## Debug & Monitoring
 
@@ -192,14 +192,13 @@ cd functions && firebase emulators:start --only functions,firestore
 
 | Problem | Fix |
 |---------|-----|
-| Functions return 500 | Check `firebase functions:log` for errors |
-| Forecast data empty | Check Firestore `cache/forecast` document exists. Manually trigger `scheduledForecastFetch` via Cloud Scheduler |
-| Firestore gRPC errors in logs | Firestore database not created yet — go to Firebase Console → Build → Firestore Database → Create database → choose `us-central1` |
+| Forecast/tide/marine data empty | Check Firestore `cache/forecast`, `cache/tide`, `cache/marine` documents exist. Manually trigger `scheduledForecastFetch` or `scheduledMarineFetch` via Cloud Scheduler |
+| Firestore permission denied in browser | Check `firestore.rules` — `cache/{document}` must allow public reads |
+| Firestore gRPC errors in function logs | Firestore database not created yet — go to Firebase Console → Build → Firestore Database → Create database → choose `us-central1` |
 | Marine forecast missing | Check Firestore `cache/marine`. weather.gc.ca may be temporarily down |
 | Tide data not found | Ensure `07811_data.csv` is in `functions/` directory |
 | Deploy fails | Run `firebase login` and confirm `.firebaserc` project ID matches your Firebase project |
 | Scheduler not running | Check Cloud Scheduler in Google Cloud Console → verify jobs are enabled |
-| CORS errors | The functions set `Access-Control-Allow-Origin: *` headers |
 
 ## Cost Estimate (Blaze Plan)
 
@@ -208,9 +207,9 @@ For a low-traffic site (~100 visits/day):
 | Service | Usage | Cost |
 |---------|-------|------|
 | Hosting | <360 MB/day | Free |
-| Functions | ~500 invocations/day | Free (2M/month included) |
-| Firestore | ~500 reads/day, 8 writes/day | Free (50K reads, 20K writes/day) |
-| Cloud Scheduler | 6 jobs | Free (3 free, ~$0.10/month for extra) |
+| Functions | ~12 invocations/day (cron only) | Free (2M/month included) |
+| Firestore | ~300 reads/day, 12 writes/day | Free (50K reads, 20K writes/day) |
+| Cloud Scheduler | 2 jobs | Free (3 free jobs included) |
 | **Total** | | **~$0/month** |
 
 ## Data Sources

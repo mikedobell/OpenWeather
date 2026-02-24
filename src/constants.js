@@ -33,7 +33,3 @@ export const DAYTIME_HOURS_PT = [];
 for (let h = 7; h <= 21; h++) {
   DAYTIME_HOURS_PT.push(h);
 }
-
-export const API_ENDPOINT = '/api/forecast';
-export const MARINE_API_ENDPOINT = '/api/marine';
-export const TIDE_API_ENDPOINT = '/api/tide';
