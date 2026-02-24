@@ -380,7 +380,7 @@ async function writeCache(key, data) {
 // Cloud Functions: Scheduled Pre-fetch
 // ============================================================
 
-// Runs every 6 hours (PT) to pre-fetch HRDPS data
+// Runs every 6 hours (PT) to pre-fetch HRDPS data — Node.js 22
 exports.scheduledForecastFetch = onSchedule({
   schedule: "0 4,10,16,22 * * *", // 4am, 10am, 4pm, 10pm PT
   timeZone: "America/Vancouver",
