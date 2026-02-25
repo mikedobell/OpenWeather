@@ -372,7 +372,8 @@ async function writeCache(key, data) {
   try {
     await db.collection("cache").doc(key).set(data);
   } catch (err) {
-    console.warn(`Firestore write failed for "${key}":`, err.message);
+    console.error(`Firestore write failed for "${key}": [${err.code}] ${err.message}`);
+    throw err;
   }
 }
 
@@ -391,16 +392,20 @@ exports.scheduledForecastFetch = onSchedule({
     try {
       const data = await fetchAllForecastData();
       await writeCache("forecast", data);
-      console.log(`Forecast fetched: ${data.fetch_stats.total} requests, ${data.fetch_stats.errors} errors`);
+      console.log(`Forecast cached: ${data.fetch_stats.total} requests, ${data.fetch_stats.errors} errors`);
     } catch (err) {
-      console.error("Scheduled forecast fetch failed:", err);
+      console.error("Forecast fetch/write failed:", err.message || err);
     }
     try {
       const tideData = parseTideData(2);
-      await writeCache("tide", tideData);
-      console.log("Tide data cached");
+      if (tideData.error) {
+        console.error("Tide data parse error:", tideData.error);
+      } else {
+        await writeCache("tide", tideData);
+        console.log(`Tide data cached: ${tideData.data?.length || 0} points`);
+      }
     } catch (err) {
-      console.error("Scheduled tide cache failed:", err);
+      console.error("Tide cache failed:", err.message || err);
     }
     return null;
   });
@@ -414,10 +419,14 @@ exports.scheduledMarineFetch = onSchedule({
     console.log("Scheduled marine forecast fetch starting...");
     try {
       const data = await fetchMarineForecast();
+      if (data.error) {
+        console.error("Marine forecast fetch returned error:", data.error);
+        return null;
+      }
       await writeCache("marine", data);
-      console.log("Marine forecast updated");
+      console.log(`Marine forecast updated: ${data.entry_titles?.length || 0} entries, ${Object.keys(data.sections || {}).length} sections`);
     } catch (err) {
-      console.error("Scheduled marine fetch failed:", err);
+      console.error("Scheduled marine fetch failed:", err.message || err);
     }
     return null;
   });
