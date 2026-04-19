@@ -43,6 +43,25 @@ function ForecastSection({ sectionKey, section }) {
     }
   }
 
+  // EC forecast text is hard-wrapped mid-sentence. Reflow so a line only
+  // starts a new block when the previous line ends a sentence or this line
+  // begins with a day header.
+  const DAY_START =
+    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Today|Tonight)\b/i;
+  const SENTENCE_END = /[.!?:]$/;
+  const reflowed = [];
+  for (const line of contentLines) {
+    if (!line) continue;
+    const prev = reflowed[reflowed.length - 1];
+    const startsNewBlock = !prev || SENTENCE_END.test(prev) || DAY_START.test(line);
+    if (startsNewBlock) {
+      reflowed.push(line);
+    } else {
+      reflowed[reflowed.length - 1] = prev + ' ' + line;
+    }
+  }
+  contentLines = reflowed;
+
   // For winds/forecast sections: split dense paragraphs at sentence boundaries
   // so each "Wind ..." sentence gets its own line
   if (sectionKey === 'winds' || sectionKey === 'forecast') {
