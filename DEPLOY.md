@@ -63,35 +63,56 @@ The rules allow public reads (the React frontend reads `cache/*` directly via th
 
 ## Deploy
 
-Deploys are run manually from a local machine. CI-based deploy was attempted but abandoned — the Workspace org policy blocks service-account key creation (`iam.disableServiceAccountKeyCreation`), WIF's `external_account` credentials aren't supported by firebase-tools, and the OAuth scopes granted to `firebase login:ci` refresh tokens are restricted by Workspace policy and can't call basic GCP APIs. Manual deploy is the pragmatic path.
+Deploys run manually from a local machine. CI-based deploy was attempted but abandoned — the Workspace org policy blocks service-account key creation (`iam.disableServiceAccountKeyCreation`), WIF's `external_account` credentials aren't supported by firebase-tools, and the OAuth scopes granted to `firebase login:ci` refresh tokens are restricted by Workspace policy and can't call basic GCP APIs. Manual deploy is the pragmatic path.
+
+### Everyday deploy
+
+After pulling or making changes:
 
 ```bash
-# From project root:
-
-# 1. Install dependencies (first time or after package.json changes)
-npm install
-cd functions && npm install && cd ..
-
-# 2. Build frontend
-npm run build
-
-# 3. Deploy everything
+cd ~/Coding/OpenWeather
+npm run build      # only if frontend (src/) changed
 firebase deploy
 ```
 
-This deploys:
-- **Hosting**: `dist/` directory → Firebase CDN
-- **Functions**: `functions/` directory → Cloud Functions
-- **Firestore rules**: `firestore.rules` → Firestore security rules
-- **Scheduled functions**: Automatically creates Cloud Scheduler jobs
+That's it. The deploy pushes hosting, functions, and firestore rules in one shot. Total time: ~1–2 minutes.
 
-To deploy only a subset:
+### First-time setup (or after package.json changes)
+
+Run `npm install` in both the root and `functions/` before the first deploy:
+
+```bash
+cd ~/Coding/OpenWeather
+npm install
+cd functions && npm install && cd ..
+npm run build
+firebase deploy
+```
+
+### What gets deployed
+
+- **Hosting**: `dist/` directory → Firebase CDN
+- **Functions**: `functions/` directory → Cloud Functions (Node.js 22)
+- **Firestore rules**: `firestore.rules` → Firestore security rules
+- **Scheduled functions**: Automatically creates/updates Cloud Scheduler jobs
+
+### Deploy a subset
 
 ```bash
 firebase deploy --only hosting
 firebase deploy --only functions
 firebase deploy --only firestore
 ```
+
+### Common pitfalls
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Couldn't find firebase-functions package` | Missed `npm install` in `functions/` | `cd functions && npm install` |
+| `Directory 'dist' for Hosting does not exist` | Didn't build before deploy | `npm run build` |
+| `Failed to authenticate, have you run firebase login?` | CLI not logged in | `firebase login` |
+
+> **Note:** Do not run the repo from `~/Documents/` or any iCloud-synced path. iCloud creates duplicate ref files (e.g. `main 2`) and corrupts git pack files (`pack-objects died of signal 10`). Use `~/Coding/` or another local, non-synced location.
 
 ## How It Works
 
