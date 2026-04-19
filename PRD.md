@@ -113,7 +113,7 @@ GET https://geo.weather.gc.ca/geomet?
 - **CDN**: Firebase Hosting serves static `dist/` directory globally
 - **Rewrites**: `/api/forecast`, `/api/marine`, `/api/tide` → Cloud Functions
 - **SPA Fallback**: All other routes → `index.html`
-- **Deploy**: `firebase deploy` or GitHub Actions auto-deploy on push to main
+- **Deploy**: `firebase deploy` run manually from local machine
 
 ## Functional Requirements
 

@@ -20,7 +20,6 @@ Firebase Hosting (CDN)          Cloud Functions (Node.js 20)
 1. A Firebase project on the **Blaze** plan (pay-as-you-go, but free-tier usage is sufficient)
 2. Node.js 18+ and npm installed locally
 3. Firebase CLI installed: `npm install -g firebase-tools`
-4. GitHub repo connected for auto-deploy (optional)
 
 ## Initial Firebase Project Setup
 
@@ -64,12 +63,12 @@ The rules allow public reads (the React frontend reads `cache/*` directly via th
 
 ## Deploy
 
-### Manual deploy
+Deploys are run manually from a local machine. CI-based deploy was attempted but abandoned — the Workspace org policy blocks service-account key creation (`iam.disableServiceAccountKeyCreation`), WIF's `external_account` credentials aren't supported by firebase-tools, and the OAuth scopes granted to `firebase login:ci` refresh tokens are restricted by Workspace policy and can't call basic GCP APIs. Manual deploy is the pragmatic path.
 
 ```bash
 # From project root:
 
-# 1. Install dependencies
+# 1. Install dependencies (first time or after package.json changes)
 npm install
 cd functions && npm install && cd ..
 
@@ -86,46 +85,13 @@ This deploys:
 - **Firestore rules**: `firestore.rules` → Firestore security rules
 - **Scheduled functions**: Automatically creates Cloud Scheduler jobs
 
-### Deploy from GitHub (recommended)
+To deploy only a subset:
 
-1. In Firebase Console → Hosting → click **"Set up GitHub Action"** (or "Get started with GitHub")
-2. Authorize Firebase to your GitHub repo
-3. Firebase will create a `.github/workflows/firebase-hosting-merge.yml` and PR preview workflow
-4. On every push to your main branch, Firebase auto-builds and deploys
-
-**Or manually create the workflow:**
-
-Create `.github/workflows/firebase-deploy.yml`:
-
-```yaml
-name: Deploy to Firebase
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build
-      - run: cd functions && npm ci
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
+```bash
+firebase deploy --only hosting
+firebase deploy --only functions
+firebase deploy --only firestore
 ```
-
-To set up the secret:
-1. Firebase Console → Project Settings → Service Accounts
-2. Click **Generate new private key** → download JSON
-3. In GitHub repo → Settings → Secrets → Actions → **New repository secret**
-4. Name: `FIREBASE_SERVICE_ACCOUNT`, Value: paste the entire JSON content
 
 ## How It Works
 
