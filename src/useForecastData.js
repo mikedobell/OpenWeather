@@ -22,6 +22,10 @@ export default function useForecastData() {
         throw new Error(json.error);
       }
 
+      if (!hasAnyValues(json.forecast)) {
+        throw new Error('Forecast cache has no usable values');
+      }
+
       setData(json.forecast);
       setDates(json.dates || []);
       setLastUpdated(json.generated_at || new Date().toISOString());
@@ -45,6 +49,20 @@ export default function useForecastData() {
   }, [fetchData]);
 
   return { data, loading, error, lastUpdated, modelRun, dates, refetch: fetchData };
+}
+
+function hasAnyValues(forecast) {
+  if (!forecast || typeof forecast !== 'object') return false;
+  for (const loc of Object.values(forecast)) {
+    if (!loc) continue;
+    for (const series of Object.values(loc)) {
+      if (!Array.isArray(series)) continue;
+      if (series.some((p) => p && p.value !== null && p.value !== undefined)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
