@@ -391,8 +391,14 @@ exports.scheduledForecastFetch = onSchedule({
     console.log("Scheduled forecast fetch starting...");
     try {
       const data = await fetchAllForecastData();
-      await writeCache("forecast", data);
-      console.log(`Forecast cached: ${data.fetch_stats.total} requests, ${data.fetch_stats.errors} errors`);
+      const { total, errors } = data.fetch_stats;
+      const errorRate = total > 0 ? errors / total : 1;
+      if (errorRate > 0.3) {
+        console.warn(`Forecast fetch had ${errors}/${total} errors (${(errorRate * 100).toFixed(1)}%) — skipping cache write to preserve previous good data.`);
+      } else {
+        await writeCache("forecast", data);
+        console.log(`Forecast cached: ${total} requests, ${errors} errors`);
+      }
     } catch (err) {
       console.error("Forecast fetch/write failed:", err.message || err);
     }
