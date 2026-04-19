@@ -32,4 +32,4 @@ jobs:
       - name: Deploy to Firebase
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: firebase deploy --only hosting,functions,firestore --non-interactive --project openweather-826fc
+        run: firebase deploy --only hosting,functions --non-interactive --project openweather-826fc
