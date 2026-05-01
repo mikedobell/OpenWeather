@@ -2,6 +2,7 @@ export const LOCATIONS = [
   { id: 'pamrocks', name: 'Pam Rocks', lat: 49.4883, lon: -123.2983, color: '#63B3ED', colorDark: '#90CDF4' },
   { id: 'squamish', name: 'Squamish', lat: 49.7016, lon: -123.1558, color: '#3182CE', colorDark: '#63B3ED' },
   { id: 'whistler', name: 'Whistler', lat: 50.1163, lon: -122.9574, color: '#2C5282', colorDark: '#4299E1' },
+  { id: 'pemberton', name: 'Pemberton', lat: 50.3192, lon: -122.8035, color: '#2A4365', colorDark: '#3182CE' },
   { id: 'lillooet', name: 'Lillooet', lat: 50.6868, lon: -121.9422, color: '#1A365D', colorDark: '#2B6CB0' },
 ];
 

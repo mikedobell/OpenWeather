@@ -21,6 +21,7 @@ const LOCATIONS = {
   pamrocks: { name: "Pam Rocks", lat: 49.4883, lon: -123.2983 },
   squamish: { name: "Squamish", lat: 49.7016, lon: -123.1558 },
   whistler: { name: "Whistler", lat: 50.1163, lon: -122.9574 },
+  pemberton: { name: "Pemberton", lat: 50.3192, lon: -122.8035 },
   lillooet: { name: "Lillooet", lat: 50.6868, lon: -121.9422 },
 };
 

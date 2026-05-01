@@ -94,14 +94,14 @@ function generateDemoData() {
   const forecast = {};
 
   // Pressure base values (hPa) - slight coastal/inland gradient
-  const pressureBase = { pamrocks: 1015.2, squamish: 1014.8, whistler: 1014.0, lillooet: 1013.5 };
+  const pressureBase = { pamrocks: 1015.2, squamish: 1014.8, whistler: 1014.0, pemberton: 1013.8, lillooet: 1013.5 };
   // Temperature patterns (°C)
-  const tempMorning = { pamrocks: 12, squamish: 10, whistler: 8, lillooet: 14 };
-  const tempPeak = { pamrocks: 18, squamish: 24, whistler: 22, lillooet: 34 };
+  const tempMorning = { pamrocks: 12, squamish: 10, whistler: 8, pemberton: 11, lillooet: 14 };
+  const tempPeak = { pamrocks: 18, squamish: 24, whistler: 22, pemberton: 28, lillooet: 34 };
   // Cloud cover (%)
-  const cloudBase = { pamrocks: 30, squamish: 20, whistler: 15, lillooet: 5 };
+  const cloudBase = { pamrocks: 30, squamish: 20, whistler: 15, pemberton: 10, lillooet: 5 };
 
-  for (const locId of ['pamrocks', 'squamish', 'whistler', 'lillooet']) {
+  for (const locId of ['pamrocks', 'squamish', 'whistler', 'pemberton', 'lillooet']) {
     forecast[locId] = {
       pressure: [],
       temperature: [],
@@ -115,7 +115,7 @@ function generateDemoData() {
 
         // Pressure: slight diurnal variation, inland drops more in afternoon
         const pBase = pressureBase[locId];
-        const pDiurnal = locId === 'lillooet' ? -2.5 * peakT : locId === 'whistler' ? -1.5 * peakT : -0.5 * peakT;
+        const pDiurnal = locId === 'lillooet' ? -2.5 * peakT : locId === 'pemberton' ? -2.0 * peakT : locId === 'whistler' ? -1.5 * peakT : -0.5 * peakT;
         const pressure = Math.round((pBase + pDiurnal + (Math.random() - 0.5) * 0.3) * 10) / 10;
 
         // Temperature: rises to peak in early afternoon, drops in evening
@@ -126,7 +126,7 @@ function generateDemoData() {
 
         // Cloud: builds through afternoon, especially inland
         const cBase = cloudBase[locId];
-        const cloudBuild = locId === 'lillooet' ? 25 * Math.max(0, t - 0.3) : locId === 'whistler' ? 35 * Math.max(0, t - 0.2) : 15 * Math.max(0, t - 0.4);
+        const cloudBuild = locId === 'lillooet' ? 25 * Math.max(0, t - 0.3) : locId === 'pemberton' ? 30 * Math.max(0, t - 0.25) : locId === 'whistler' ? 35 * Math.max(0, t - 0.2) : 15 * Math.max(0, t - 0.4);
         const cloud = Math.min(100, Math.max(0, Math.round(cBase + cloudBuild + (Math.random() - 0.5) * 5)));
 
         forecast[locId].pressure.push({ hour: h, value: pressure, date });

@@ -91,9 +91,7 @@ function DateNav({ dates, selectedDate, onDateChange }) {
 }
 
 export default function ForecastChart({ variable, data, dates, selectedDate, onDateChange }) {
-  const [hiddenSeries, setHiddenSeries] = useState(() =>
-    variable.id === 'cloud' ? new Set(['whistler', 'lillooet']) : new Set()
-  );
+  const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['whistler', 'lillooet']));
   const isDark = useColorModeValue(false, true);
   const cardBg = useColorModeValue('white', 'gray.800');
   const gridColor = useColorModeValue('#E2E8F0', '#2D3748');
