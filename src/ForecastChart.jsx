@@ -142,9 +142,11 @@ export default function ForecastChart({ variable, data, observations, dates, sel
         const obsValue = obsMatch ? obsMatch.value : null;
         const boundary = lastObsHour[loc.id];
         row[`${loc.id}_obs`] = obsValue;
-        // Forecast series spans from the boundary onward, so the dashed line picks up
-        // exactly where the solid line ends. If no obs for this location, dashed covers all hours.
-        row[`${loc.id}_fcst`] = boundary == null || point.hour >= boundary ? fcstValue : null;
+        // Forecast line starts 1 hour before the last obs so the final 2 hours show
+        // obs and forecast side by side (lets you eyeball model bias at the handoff).
+        // If no obs for this location, dashed covers all hours.
+        const OVERLAP_HOURS = 2;
+        row[`${loc.id}_fcst`] = boundary == null || point.hour >= boundary - (OVERLAP_HOURS - 1) ? fcstValue : null;
       } else {
         row[loc.id] = fcstValue;
       }
