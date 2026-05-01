@@ -90,7 +90,7 @@ function DateNav({ dates, selectedDate, onDateChange }) {
   );
 }
 
-export default function ForecastChart({ variable, data, dates, selectedDate, onDateChange }) {
+export default function ForecastChart({ variable, data, observations, dates, selectedDate, onDateChange }) {
   const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['whistler', 'lillooet']));
   const isDark = useColorModeValue(false, true);
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -114,6 +114,19 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
   // If no points match (old API without date field), show all points
   const pointsToUse = filteredPoints.length > 0 ? filteredPoints : allPoints;
 
+  // For each location on the pressure chart, find the last hour that has an observation
+  // on the selected date — solid (obs) line ends here, dashed (forecast) starts here.
+  const lastObsHour = {};
+  if (observations && selectedDate) {
+    for (const loc of LOCATIONS) {
+      const obsForLoc = observations[loc.id] || [];
+      const todays = obsForLoc.filter((d) => d.date === selectedDate);
+      if (todays.length > 0) {
+        lastObsHour[loc.id] = Math.max(...todays.map((d) => d.hour));
+      }
+    }
+  }
+
   for (const point of pointsToUse) {
     const row = { hour: point.hour };
     for (const loc of LOCATIONS) {
@@ -121,7 +134,20 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
       const match = selectedDate
         ? locData.find((d) => d.hour === point.hour && d.date === selectedDate)
         : locData.find((d) => d.hour === point.hour);
-      row[loc.id] = match ? match.value : null;
+      const fcstValue = match ? match.value : null;
+
+      if (observations) {
+        const obsForLoc = observations[loc.id] || [];
+        const obsMatch = obsForLoc.find((d) => d.hour === point.hour && d.date === selectedDate);
+        const obsValue = obsMatch ? obsMatch.value : null;
+        const boundary = lastObsHour[loc.id];
+        row[`${loc.id}_obs`] = obsValue;
+        // Forecast series spans from the boundary onward, so the dashed line picks up
+        // exactly where the solid line ends. If no obs for this location, dashed covers all hours.
+        row[`${loc.id}_fcst`] = boundary == null || point.hour >= boundary ? fcstValue : null;
+      } else {
+        row[loc.id] = fcstValue;
+      }
     }
     chartData.push(row);
   }
@@ -141,7 +167,7 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
     });
   };
 
-  // Calculate Y-axis domain with padding
+  // Calculate Y-axis domain with padding (include observed values where present)
   let allValues = [];
   for (const loc of LOCATIONS) {
     if (hiddenSeries.has(loc.id)) continue;
@@ -151,6 +177,10 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
       : locData;
     const points = filtered.length > 0 ? filtered : locData;
     allValues = allValues.concat(points.map((d) => d.value).filter((v) => v !== null));
+    if (observations) {
+      const obsForLoc = (observations[loc.id] || []).filter((d) => d.date === selectedDate);
+      allValues = allValues.concat(obsForLoc.map((d) => d.value).filter((v) => v !== null));
+    }
   }
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
@@ -231,6 +261,40 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
             <Tooltip content={<CustomTooltip unit={variable.unit} />} />
             {LOCATIONS.map((loc) => {
               const color = isDark ? loc.colorDark : loc.color;
+              const isHidden = hiddenSeries.has(loc.id);
+              if (observations) {
+                return (
+                  <React.Fragment key={loc.id}>
+                    <Area
+                      type="monotone"
+                      dataKey={`${loc.id}_obs`}
+                      name={`${loc.name} (obs)`}
+                      stroke={color}
+                      strokeWidth={2}
+                      fill={`url(#gradient-${variable.id}-${loc.id})`}
+                      hide={isHidden}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 2 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={`${loc.id}_fcst`}
+                      name={`${loc.name} (forecast)`}
+                      stroke={color}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      fill="none"
+                      hide={isHidden}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 2 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  </React.Fragment>
+                );
+              }
               return (
                 <Area
                   key={loc.id}
@@ -240,7 +304,7 @@ export default function ForecastChart({ variable, data, dates, selectedDate, onD
                   stroke={color}
                   strokeWidth={2}
                   fill={`url(#gradient-${variable.id}-${loc.id})`}
-                  hide={hiddenSeries.has(loc.id)}
+                  hide={isHidden}
                   dot={false}
                   activeDot={{ r: 4, strokeWidth: 2 }}
                   connectNulls

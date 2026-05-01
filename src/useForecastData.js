@@ -4,6 +4,7 @@ import { db } from './firebase';
 
 export default function useForecastData() {
   const [data, setData] = useState(null);
+  const [observations, setObservations] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -14,9 +15,13 @@ export default function useForecastData() {
     setLoading(true);
     setError(null);
     try {
-      const snap = await getDoc(doc(db, 'cache', 'forecast'));
-      if (!snap.exists()) throw new Error('Forecast cache not yet populated');
-      const json = snap.data();
+      const [forecastSnap, obsSnap] = await Promise.all([
+        getDoc(doc(db, 'cache', 'forecast')),
+        getDoc(doc(db, 'cache', 'observations')),
+      ]);
+
+      if (!forecastSnap.exists()) throw new Error('Forecast cache not yet populated');
+      const json = forecastSnap.data();
 
       if (json.error) {
         throw new Error(json.error);
@@ -30,6 +35,7 @@ export default function useForecastData() {
       setDates(json.dates || []);
       setLastUpdated(json.generated_at || new Date().toISOString());
       setModelRun(json.model_run || null);
+      setObservations(obsSnap.exists() ? obsSnap.data().observations || null : null);
     } catch (err) {
       console.error('Failed to fetch forecast data:', err);
       setError(err.message);
@@ -39,6 +45,7 @@ export default function useForecastData() {
       setDates(demo.dates);
       setLastUpdated(new Date().toISOString());
       setModelRun('demo');
+      setObservations(null);
     } finally {
       setLoading(false);
     }
@@ -48,7 +55,7 @@ export default function useForecastData() {
     fetchData();
   }, [fetchData]);
 
-  return { data, loading, error, lastUpdated, modelRun, dates, refetch: fetchData };
+  return { data, observations, loading, error, lastUpdated, modelRun, dates, refetch: fetchData };
 }
 
 function hasAnyValues(forecast) {

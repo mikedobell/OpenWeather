@@ -150,7 +150,7 @@ function Footer() {
 }
 
 export default function App() {
-  const { data, loading, error, lastUpdated, modelRun, dates, refetch } = useForecastData();
+  const { data, observations, loading, error, lastUpdated, modelRun, dates, refetch } = useForecastData();
   const [selectedDate, setSelectedDate] = useState(null);
 
   // Default to first date when dates become available
@@ -191,6 +191,7 @@ export default function App() {
                   key={variable.id}
                   variable={variable}
                   data={data}
+                  observations={variable.id === 'pressure' ? observations : null}
                   dates={dates}
                   selectedDate={selectedDate}
                   onDateChange={setSelectedDate}

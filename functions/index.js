@@ -366,6 +366,141 @@ function parseTideData(days = 2) {
 }
 
 // ============================================================
+// Surface Pressure Observations
+// ============================================================
+
+const OBS_STATIONS = {
+  pamrocks: { bbox: [-123.305, 49.483, -123.293, 49.493], elevation: 9, useMslp: true },
+  squamish: { bbox: [-123.168, 49.778, -123.155, 49.788], elevation: 57, useMslp: false },
+  whistler: { bbox: [-122.962, 50.124, -122.948, 50.134], elevation: 662, useMslp: false },
+  lillooet: { bbox: [-121.940, 50.679, -121.928, 50.689], elevation: 240, useMslp: true },
+};
+
+// Reduce station pressure (hPa) to MSL using observed temp + standard lapse.
+function reduceToMSL(stnPresHpa, tempC, elevM) {
+  if (stnPresHpa == null || tempC == null) return null;
+  const factor = Math.pow(
+    1 - (0.0065 * elevM) / (tempC + 0.0065 * elevM + 273.15),
+    -5.257
+  );
+  return stnPresHpa * factor;
+}
+
+function ptHourFromUtc(utcIso) {
+  const d = new Date(utcIso);
+  if (isNaN(d.getTime())) return null;
+  // Get PT components via en-CA locale parts
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Vancouver",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(d).reduce((acc, p) => (acc[p.type] = p.value, acc), {});
+  if (!parts.year || !parts.hour) return null;
+  let hour = parseInt(parts.hour, 10);
+  if (hour === 24) hour = 0; // some locales emit "24" for midnight
+  const minute = parseInt(parts.minute, 10);
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour,
+    minute,
+    utc: d.getTime(),
+  };
+}
+
+function aggregateHourlySwob(features, cfg) {
+  // Group features by PT date+hour, keep the obs closest to top-of-hour with valid pressure.
+  const byHour = new Map();
+  for (const f of features) {
+    const props = f.properties || {};
+    const ts = props["date_tm-value"] || props.obs_date_tm;
+    const ph = ptHourFromUtc(ts);
+    if (!ph) continue;
+    const stnPres = parseFloat(props.stn_pres);
+    const mslp = parseFloat(props.mslp);
+    const tempC = parseFloat(props.air_temp);
+    let value;
+    if (cfg.useMslp) {
+      value = isFinite(mslp) ? mslp : null;
+    } else {
+      value = isFinite(stnPres) && isFinite(tempC)
+        ? reduceToMSL(stnPres, tempC, cfg.elevation)
+        : null;
+    }
+    if (value == null || !isFinite(value)) continue;
+    const key = `${ph.date}T${ph.hour}`;
+    const dist = Math.abs(ph.minute - 0); // distance to top-of-hour in minutes
+    const prev = byHour.get(key);
+    if (!prev || dist < prev.dist) {
+      byHour.set(key, { date: ph.date, hour: ph.hour, value, dist });
+    }
+  }
+  return [...byHour.values()].map((o) => ({
+    date: o.date,
+    hour: o.hour,
+    value: Math.round(o.value * 10) / 10,
+  }));
+}
+
+async function fetchSwobStation(locId, cfg) {
+  const bbox = cfg.bbox.join(",");
+  const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&f=json&limit=200&sortby=-date_tm-value`;
+  const raw = await httpGet(url);
+  if (!raw) return [];
+  let json;
+  try { json = JSON.parse(raw); } catch { return []; }
+  return aggregateHourlySwob(json.features || [], cfg);
+}
+
+// Pemberton has no SWOB pressure source — scrape weather.gc.ca past_conditions HTML.
+async function fetchPembertonScrape() {
+  const raw = await httpGet(
+    "https://weather.gc.ca/past_conditions/index_e.html?station=wgp",
+    "text/html"
+  );
+  if (!raw) return [];
+
+  const parts = raw.split(/<tr[^>]*>/);
+  const rows = [];
+  let curDate = null;
+
+  for (const part of parts) {
+    const dateHdr = part.match(/class="wxo-th-bkg table-date"[^>]*>\s*(\d{1,2})\s+(\w+)\s+(\d{4})/);
+    if (dateHdr) {
+      const months = { January:1,February:2,March:3,April:4,May:5,June:6,July:7,August:8,September:9,October:10,November:11,December:12 };
+      const m = months[dateHdr[2]];
+      if (m) curDate = `${dateHdr[3]}-${String(m).padStart(2,"0")}-${String(parseInt(dateHdr[1],10)).padStart(2,"0")}`;
+      continue;
+    }
+    const tm = part.match(/headers="header1"[^>]*>\s*(\d{1,2}):(\d{2})/);
+    const pr = part.match(/headers="header9m"[^>]*>\s*([\d.]+)/);
+    if (!tm || !pr || !curDate) continue;
+    const hour = parseInt(tm[1], 10);
+    const presKpa = parseFloat(pr[1]);
+    if (!isFinite(presKpa)) continue;
+    rows.push({ date: curDate, hour, value: Math.round(presKpa * 10 * 10) / 10 }); // kPa→hPa, 1dp
+  }
+  return rows;
+}
+
+async function fetchAllObservations() {
+  const obs = {};
+  const tasks = Object.entries(OBS_STATIONS).map(async ([locId, cfg]) => {
+    obs[locId] = await fetchSwobStation(locId, cfg);
+  });
+  tasks.push((async () => { obs.pemberton = await fetchPembertonScrape(); })());
+  await Promise.all(tasks);
+
+  const counts = Object.fromEntries(
+    Object.entries(obs).map(([k, v]) => [k, v.length])
+  );
+  return {
+    observations: obs,
+    counts,
+    generated_at: new Date().toISOString(),
+  };
+}
+
+// ============================================================
 // Helper: write Firestore cache
 // ============================================================
 
@@ -413,6 +548,29 @@ exports.scheduledForecastFetch = onSchedule({
       }
     } catch (err) {
       console.error("Tide cache failed:", err.message || err);
+    }
+    return null;
+  });
+
+// Runs hourly to pull surface pressure observations from SWOB + Pemberton scrape
+exports.scheduledObsFetch = onSchedule({
+  schedule: "5 * * * *", // every hour at :05
+  timeZone: "America/Vancouver",
+  timeoutSeconds: 120,
+  memory: "256MiB",
+}, async () => {
+    console.log("Scheduled observations fetch starting...");
+    try {
+      const data = await fetchAllObservations();
+      const totalPoints = Object.values(data.counts).reduce((a, b) => a + b, 0);
+      if (totalPoints === 0) {
+        console.warn("Observations fetch returned no data — skipping cache write.");
+        return null;
+      }
+      await writeCache("observations", data);
+      console.log(`Observations cached: ${JSON.stringify(data.counts)}`);
+    } catch (err) {
+      console.error("Observations fetch/write failed:", err.message || err);
     }
     return null;
   });
