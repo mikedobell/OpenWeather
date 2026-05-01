@@ -442,8 +442,13 @@ function aggregateHourlySwob(features, cfg) {
 }
 
 async function fetchSwobStation(locId, cfg) {
+  // Some stations report hourly, others every minute — filter by datetime so the
+  // result is the same N hours of history regardless of cadence.
+  const end = new Date();
+  const start = new Date(end.getTime() - 18 * 3600 * 1000); // last 18h, covers chart's 7–21 PT
+  const datetime = `${start.toISOString()}/${end.toISOString()}`;
   const bbox = cfg.bbox.join(",");
-  const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&f=json&limit=200&sortby=-date_tm-value`;
+  const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
   const raw = await httpGet(url);
   if (!raw) return [];
   let json;
