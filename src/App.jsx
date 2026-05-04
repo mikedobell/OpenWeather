@@ -26,6 +26,7 @@ import useForecastData from './useForecastData';
 // Lazy-load chart components so Recharts (382 KB) downloads in parallel with API data
 const ForecastChart = lazy(() => import('./ForecastChart'));
 const TideChart = lazy(() => import('./TideChart'));
+const SpitForecast = lazy(() => import('./SpitForecast'));
 const MarineForecast = lazy(() => import('./MarineForecast'));
 
 function Header() {
@@ -203,6 +204,12 @@ export default function App() {
                   selectedDate={selectedDate}
                   onDateChange={setSelectedDate}
                 />
+
+              <SpitForecast
+                dates={dates}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+              />
 
               <MarineForecast />
             </Box>

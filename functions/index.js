@@ -580,6 +580,35 @@ exports.scheduledObsFetch = onSchedule({
     return null;
   });
 
+// Runs hourly to mirror the paraglidingwx.com Spit ML forecast.
+// The endpoint is a public JSON feed (cache-control: public, max-age=60); we mirror
+// into Firestore so user browsers never hit the upstream directly.
+exports.scheduledSpitFetch = onSchedule({
+  schedule: "10 * * * *", // every hour at :10
+  timeZone: "America/Vancouver",
+  timeoutSeconds: 60,
+  memory: "256MiB",
+}, async () => {
+    console.log("Scheduled Spit forecast fetch starting...");
+    try {
+      const raw = await httpGet("https://www.paraglidingwx.com/api/spit-forecast");
+      if (!raw) {
+        console.warn("Spit fetch returned empty; skipping cache write.");
+        return null;
+      }
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data?.forecast_hours) || data.forecast_hours.length === 0) {
+        console.warn("Spit response missing forecast_hours; skipping cache write.");
+        return null;
+      }
+      await writeCache("spit", { ...data, mirrored_at: new Date().toISOString() });
+      console.log(`Spit cached: obs ${data.obs_recent?.length || 0}, forecast ${data.forecast_hours.length}`);
+    } catch (err) {
+      console.error("Spit fetch/write failed:", err.message || err);
+    }
+    return null;
+  });
+
 // Runs every 3 hours to update marine forecast
 exports.scheduledMarineFetch = onSchedule({
   schedule: "30 */3 * * *", // every 3 hours at :30
