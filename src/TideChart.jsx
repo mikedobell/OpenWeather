@@ -158,7 +158,6 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1} flexWrap="wrap" gap={2}>
         <Box>
           <Heading size="md" mb={1}>Tide Forecast (m)</Heading>
-          <Text fontSize="sm" color="gray.500">Squamish Inner — Predicted water level</Text>
         </Box>
         {dates.length > 1 && (
           <HStack spacing={1}>

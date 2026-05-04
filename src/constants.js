@@ -12,21 +12,18 @@ export const VARIABLES = [
     label: 'Surface Pressure',
     unit: 'hPa',
     layer: 'HRDPS.CONTINENTAL_PN',
-    description: 'Mean sea-level pressure — higher inland pressure drives katabatic outflow',
   },
   {
     id: 'temperature',
     label: 'Surface Temperature',
     unit: '°C',
     layer: 'HRDPS.CONTINENTAL_TT',
-    description: 'Air temperature at 2 m — inland heating drives anabatic inflow',
   },
   {
     id: 'cloud',
     label: 'Cloud Cover',
     unit: '%',
     layer: 'HRDPS.CONTINENTAL_NT',
-    description: 'Total cloud cover — clear skies strengthen thermal gradients',
   },
 ];
 

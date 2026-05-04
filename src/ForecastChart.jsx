@@ -197,7 +197,6 @@ export default function ForecastChart({ variable, data, observations, dates, sel
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1} flexWrap="wrap" gap={2}>
         <Box>
           <Heading size="md" mb={1}>{variable.label} ({variable.unit})</Heading>
-          <Text fontSize="sm" color="gray.500">{variable.description}</Text>
         </Box>
         {dates && dates.length > 1 && (
           <DateNav dates={dates} selectedDate={selectedDate} onDateChange={onDateChange} />
