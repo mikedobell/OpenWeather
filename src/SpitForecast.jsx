@@ -50,12 +50,10 @@ function parseLocalIso(iso) {
 }
 
 function CustomTooltip({ active, payload, label }) {
-  const bg = useColorModeValue('white', 'gray.800');
-  const border = useColorModeValue('gray.200', 'gray.600');
   if (!active || !payload || payload.length === 0) return null;
   const seen = new Set();
   return (
-    <Box bg={bg} border="1px" borderColor={border} borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
       <Text fontWeight="bold" mb={1}>{formatHour(label)}</Text>
       {payload.map((entry) => {
         if (entry.value == null || seen.has(entry.name)) return null;
@@ -77,9 +75,8 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const gridColor = useColorModeValue('#E2E8F0', '#2D3748');
-  const textColor = useColorModeValue('#4A5568', '#A0AEC0');
+  const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
+  const textColor = useColorModeValue('#4A5568', '#31322B');
   const lineColor = useColorModeValue('#2B6CB0', '#63B3ED');
   const bandColor = useColorModeValue('#90CDF4', '#2C5282');
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -141,7 +138,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
   const showCutLine = rows.some((r) => r.x >= tCut) && rows.some((r) => r.x < tCut);
 
   return (
-    <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+    <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
         <Box>
           <Heading size="md" mb={1}>Squamish Spit · Live + Forecast (km/h)</Heading>
@@ -263,9 +260,9 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
         </ResponsiveContainer>
       </Box>
 
-      <Text fontSize="xs" color="gray.500" mt={3}>
+      <Text fontSize="xs" color="text-muted" mt={3}>
         Source:{' '}
-        <Link href="https://www.paraglidingwx.com/spit-forecast-about.html" isExternal color="blue.400">
+        <Link href="https://www.paraglidingwx.com/spit-forecast-about.html" isExternal color="accent">
           paraglidingwx.com
         </Link>
         {' '}— SpitBiGRU ML model.

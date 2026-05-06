@@ -38,9 +38,6 @@ function formatDateLabel(dateStr) {
 }
 
 function CustomTooltip({ active, payload, label }) {
-  const bg = useColorModeValue('white', 'gray.800');
-  const border = useColorModeValue('gray.200', 'gray.600');
-
   if (!active || !payload || payload.length === 0) return null;
 
   const point = payload[0];
@@ -49,7 +46,7 @@ function CustomTooltip({ active, payload, label }) {
   const timeStr = `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 
   return (
-    <Box bg={bg} border="1px" borderColor={border} borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
       <Text fontWeight="bold" mb={1}>{timeStr}</Text>
       <HStack spacing={2}>
         <Box w={3} h={3} borderRadius="sm" bg={point.color} />
@@ -67,11 +64,9 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
   const [error, setError] = useState(null);
   const [tideDates, setTideDates] = useState([]);
 
-  const cardBg = useColorModeValue('white', 'gray.800');
   const isDark = useColorModeValue(false, true);
-  const gridColor = useColorModeValue('#E2E8F0', '#2D3748');
-  const textColor = useColorModeValue('#4A5568', '#A0AEC0');
-  const dateLabelColor = useColorModeValue('gray.700', 'gray.200');
+  const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
+  const textColor = useColorModeValue('#4A5568', '#31322B');
   const isMobile = useBreakpointValue({ base: true, md: false });
   const chartMargin = isMobile
     ? { top: 2, right: 4, left: -2, bottom: 2 }
@@ -105,10 +100,10 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
 
   if (loading) {
     return (
-      <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+      <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
         <Flex justify="center" align="center" minH="100px">
-          <Spinner size="md" color="blue.400" thickness="3px" mr={3} />
-          <Text color="gray.500">Loading tide data...</Text>
+          <Spinner size="md" color="accent" thickness="3px" mr={3} />
+          <Text color="text-muted">Loading tide data...</Text>
         </Flex>
       </Box>
     );
@@ -116,9 +111,9 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
 
   if (error || !data) {
     return (
-      <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+      <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
         <Heading size="md" mb={2}>Tide Forecast (m)</Heading>
-        <Text fontSize="sm" color="gray.500">Tide data is currently unavailable.</Text>
+        <Text fontSize="sm" color="text-muted">Tide data is currently unavailable.</Text>
       </Box>
     );
   }
@@ -130,9 +125,9 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
 
   if (chartData.length === 0) {
     return (
-      <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+      <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
         <Heading size="md" mb={2}>Tide Forecast (m)</Heading>
-        <Text fontSize="sm" color="gray.500">No tide data available for {formatDateLabel(activeDate)}.</Text>
+        <Text fontSize="sm" color="text-muted">No tide data available for {formatDateLabel(activeDate)}.</Text>
       </Box>
     );
   }
@@ -154,7 +149,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
   const hasNext = currentIdx < dates.length - 1;
 
   return (
-    <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+    <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1} flexWrap="wrap" gap={2}>
         <Box>
           <Heading size="md" mb={1}>Tide Forecast (m)</Heading>
@@ -169,7 +164,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
               isDisabled={!hasPrev}
               onClick={() => hasPrev && onDateChange(dates[currentIdx - 1])}
             />
-            <Text fontSize="sm" fontWeight="semibold" color={dateLabelColor} minW="60px" textAlign="center">
+            <Text fontSize="sm" fontWeight="semibold" color="text-heading" minW="60px" textAlign="center">
               {formatDateLabel(activeDate)}
             </Text>
             <IconButton

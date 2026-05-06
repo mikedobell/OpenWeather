@@ -39,13 +39,10 @@ function formatDateLabel(dateStr) {
 }
 
 function CustomTooltip({ active, payload, label, unit }) {
-  const bg = useColorModeValue('white', 'gray.800');
-  const border = useColorModeValue('gray.200', 'gray.600');
-
   if (!active || !payload || payload.length === 0) return null;
 
   return (
-    <Box bg={bg} border="1px" borderColor={border} borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
       <Text fontWeight="bold" mb={1}>{formatHour(label)}</Text>
       {payload.map((entry) => (
         <HStack key={entry.dataKey} spacing={2}>
@@ -63,8 +60,6 @@ function DateNav({ dates, selectedDate, onDateChange }) {
   const currentIdx = dates.indexOf(selectedDate);
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < dates.length - 1;
-  const dateLabelColor = useColorModeValue('gray.700', 'gray.200');
-
   return (
     <HStack spacing={1}>
       <IconButton
@@ -75,7 +70,7 @@ function DateNav({ dates, selectedDate, onDateChange }) {
         isDisabled={!hasPrev}
         onClick={() => hasPrev && onDateChange(dates[currentIdx - 1])}
       />
-      <Text fontSize="sm" fontWeight="semibold" color={dateLabelColor} minW="60px" textAlign="center">
+      <Text fontSize="sm" fontWeight="semibold" color="text-heading" minW="60px" textAlign="center">
         {formatDateLabel(selectedDate)}
       </Text>
       <IconButton
@@ -93,9 +88,8 @@ function DateNav({ dates, selectedDate, onDateChange }) {
 export default function ForecastChart({ variable, data, observations, dates, selectedDate, onDateChange }) {
   const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['whistler', 'lillooet']));
   const isDark = useColorModeValue(false, true);
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const gridColor = useColorModeValue('#E2E8F0', '#2D3748');
-  const textColor = useColorModeValue('#4A5568', '#A0AEC0');
+  const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
+  const textColor = useColorModeValue('#4A5568', '#31322B');
   const isMobile = useBreakpointValue({ base: true, md: false });
   const chartMargin = isMobile
     ? { top: 2, right: 4, left: -2, bottom: 2 }
@@ -193,7 +187,7 @@ export default function ForecastChart({ variable, data, observations, dates, sel
   ];
 
   return (
-    <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
+    <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1} flexWrap="wrap" gap={2}>
         <Box>
           <Heading size="md" mb={1}>{variable.label} ({variable.unit})</Heading>

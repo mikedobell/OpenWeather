@@ -7,7 +7,6 @@ import {
   Text,
   IconButton,
   useColorMode,
-  useColorModeValue,
   Spinner,
   Alert,
   AlertIcon,
@@ -31,18 +30,16 @@ const MarineForecast = lazy(() => import('./MarineForecast'));
 
 function Header() {
   const { colorMode, toggleColorMode } = useColorMode();
-  const bg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   return (
-    <Box bg={bg} borderBottom="1px" borderColor={borderColor} position="sticky" top={0} zIndex={10}>
+    <Box bg="bg-card" borderBottom="1px" borderColor="border-ui" position="sticky" top={0} zIndex={10}>
       <Container maxW="container.xl" py={3}>
         <Flex justify="space-between" align="center">
           <Box>
-            <Heading size={{ base: 'sm', md: 'md' }} color="blue.400">
+            <Heading size={{ base: 'sm', md: 'md' }} color="accent">
               OpenWeather.ca
             </Heading>
-            <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.500">
+            <Text fontSize={{ base: 'xs', md: 'sm' }} color="text-muted">
               Katabatic &amp; Anabatic Flow Indicators
             </Text>
           </Box>
@@ -60,8 +57,6 @@ function Header() {
 }
 
 function ModelInfo({ lastUpdated, modelRun, error }) {
-  const infoBg = useColorModeValue('blue.50', 'blue.900');
-  const infoBorder = useColorModeValue('blue.200', 'blue.700');
 
   const formatTime = (iso) => {
     if (!iso) return 'Unknown';
@@ -91,9 +86,9 @@ function ModelInfo({ lastUpdated, modelRun, error }) {
       )}
 
       <Flex
-        bg={infoBg}
+        bg="bg-info"
         border="1px"
-        borderColor={infoBorder}
+        borderColor="border-info"
         borderRadius="md"
         p={3}
         justify="space-between"
@@ -104,7 +99,7 @@ function ModelInfo({ lastUpdated, modelRun, error }) {
         <HStack spacing={3} flexWrap="wrap">
           <Badge colorScheme="blue" fontSize="xs">HRDPS</Badge>
           {modelRun && modelRun !== 'demo' && (
-            <Text fontSize="xs" color="gray.500">
+            <Text fontSize="xs" color="text-muted">
               Model Run: {modelRun}Z
             </Text>
           )}
@@ -112,7 +107,7 @@ function ModelInfo({ lastUpdated, modelRun, error }) {
             <Badge colorScheme="yellow" fontSize="xs">DEMO</Badge>
           )}
         </HStack>
-        <Text fontSize="xs" color="gray.500">
+        <Text fontSize="xs" color="text-muted">
           Last updated: {formatTime(lastUpdated)}
         </Text>
       </Flex>
@@ -121,27 +116,24 @@ function ModelInfo({ lastUpdated, modelRun, error }) {
 }
 
 function Footer() {
-  const bg = useColorModeValue('gray.100', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-
   return (
-    <Box bg={bg} borderTop="1px" borderColor={borderColor} mt={8}>
+    <Box bg="bg-footer" borderTop="1px" borderColor="border-ui" mt={8}>
       <Container maxW="container.xl" py={6}>
         <VStack spacing={2} textAlign="center">
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="text-muted">
             Data source:{' '}
-            <Link href="https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps_en/" isExternal color="blue.400">
+            <Link href="https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps_en/" isExternal color="accent">
               ECCC HRDPS
             </Link>
             {' '}via{' '}
-            <Link href="https://geo.weather.gc.ca/geomet" isExternal color="blue.400">
+            <Link href="https://geo.weather.gc.ca/geomet" isExternal color="accent">
               MSC GeoMet
             </Link>
           </Text>
-          <Text fontSize="xs" color="gray.500" fontStyle="italic">
+          <Text fontSize="xs" color="text-muted" fontStyle="italic">
             A homemade project for Sea to Sky windsports, which may be broken from time to time. Please forgive any jank.
           </Text>
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="text-muted">
             Charts show daytime hours (7 AM – 9 PM Pacific). Use arrows to page between forecast days.
           </Text>
         </VStack>
@@ -168,7 +160,7 @@ export default function App() {
       <Container maxW="container.xl" py={6}>
         {/* Intro text */}
         <Box mb={6}>
-          <Text fontSize="sm" color="gray.500" mb={4}>
+          <Text fontSize="sm" color="text-muted" mb={4}>
             HRDPS forecast data for four locations along the Sea to Sky corridor — from the coast to the interior. Compare pressure, temperature, and cloud cover to anticipate thermal wind patterns.
           </Text>
           <ModelInfo lastUpdated={lastUpdated} modelRun={modelRun} error={error} />
@@ -180,12 +172,12 @@ export default function App() {
         {loading ? (
           <Flex justify="center" align="center" minH="400px">
             <VStack spacing={4}>
-              <Spinner size="xl" color="blue.400" thickness="3px" />
-              <Text color="gray.500">Loading HRDPS forecast data...</Text>
+              <Spinner size="xl" color="accent" thickness="3px" />
+              <Text color="text-muted">Loading HRDPS forecast data...</Text>
             </VStack>
           </Flex>
         ) : (
-          <Suspense fallback={<Spinner size="lg" color="blue.400" />}>
+          <Suspense fallback={<Spinner size="lg" color="accent" />}>
             <Box>
               {VARIABLES.map((variable) => (
                 <ForecastChart

@@ -7,7 +7,6 @@ import {
   Spinner,
   VStack,
   Flex,
-  useColorModeValue,
 } from '@chakra-ui/react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
@@ -24,8 +23,8 @@ const SECTION_ORDER = ['warnings', 'forecast', 'winds', 'weather', 'extended'];
 
 function ForecastSection({ sectionKey, section }) {
   const config = SECTION_CONFIG[sectionKey];
-  const sectionBg = useColorModeValue('gray.50', 'gray.700');
-  const textColor = useColorModeValue('gray.700', 'gray.200');
+  const sectionBg = 'bg-section';
+  const textColor = 'text-heading';
 
   if (!section || !config) return null;
 
@@ -89,7 +88,7 @@ function ForecastSection({ sectionKey, section }) {
           {config.label}
         </Badge>
         {issuedLine && (
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="text-muted">
             {issuedLine}
           </Text>
         )}
@@ -116,7 +115,7 @@ function ForecastSection({ sectionKey, section }) {
           // Check for "Strong wind warning" or similar notices
           if (/warning|advisory/i.test(line)) {
             return (
-              <Text key={i} fontSize="sm" color="orange.500" fontStyle="italic" mb={1}>
+              <Text key={i} fontSize="sm" color="warning" fontStyle="italic" mb={1}>
                 {line}
               </Text>
             );
@@ -138,8 +137,8 @@ export default function MarineForecast() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const linkColor = useColorModeValue('blue.500', 'blue.300');
+  const cardBg = 'bg-card';
+  const linkColor = 'accent';
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -168,8 +167,8 @@ export default function MarineForecast() {
     return (
       <Box bg={cardBg} borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
         <Flex justify="center" align="center" minH="100px">
-          <Spinner size="md" color="blue.400" thickness="3px" mr={3} />
-          <Text color="gray.500">Loading marine forecast...</Text>
+          <Spinner size="md" color="accent" thickness="3px" mr={3} />
+          <Text color="text-muted">Loading marine forecast...</Text>
         </Flex>
       </Box>
     );
@@ -181,7 +180,7 @@ export default function MarineForecast() {
         <Heading size="md" mb={2}>
           Howe Sound Marine Forecast
         </Heading>
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="text-muted">
           Marine forecast is currently unavailable.{' '}
           <Text
             as="a"
@@ -206,7 +205,7 @@ export default function MarineForecast() {
           <Heading size="md" mb={1}>
             Howe Sound Marine Forecast
           </Heading>
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="text-muted">
             Environment Canada — Area 06400
           </Text>
         </Box>
@@ -231,7 +230,7 @@ export default function MarineForecast() {
           )}
         </VStack>
       ) : (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="text-muted">
           No forecast sections available at this time.
         </Text>
       )}
