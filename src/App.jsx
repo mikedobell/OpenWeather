@@ -26,6 +26,7 @@ import useForecastData from './useForecastData';
 const ForecastChart = lazy(() => import('./ForecastChart'));
 const TideChart = lazy(() => import('./TideChart'));
 const SpitForecast = lazy(() => import('./SpitForecast'));
+const SpitSummary = lazy(() => import('./SpitSummary'));
 const MarineForecast = lazy(() => import('./MarineForecast'));
 
 function Header() {
@@ -158,6 +159,10 @@ export default function App() {
       <Header />
 
       <Container maxW="container.xl" py={6}>
+        <Suspense fallback={null}>
+          <SpitSummary />
+        </Suspense>
+
         {/* Intro text */}
         <Box mb={6}>
           <Text fontSize="sm" color="text-muted" mb={4}>
