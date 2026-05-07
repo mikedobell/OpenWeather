@@ -46,7 +46,7 @@ function CustomTooltip({ active, payload, label }) {
   const timeStr = `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 
   return (
-    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg" color="text-heading">
       <Text fontWeight="bold" mb={1}>{timeStr}</Text>
       <HStack spacing={2}>
         <Box w={3} h={3} borderRadius="sm" bg={point.color} />

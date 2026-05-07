@@ -56,7 +56,7 @@ function CustomTooltip({ active, payload, label }) {
   if (!active || !payload || payload.length === 0) return null;
   const seen = new Set();
   return (
-    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg" color="text-heading">
       <Text fontWeight="bold" mb={1}>{formatHour(label)}</Text>
       {payload.map((entry) => {
         if (entry.value == null || seen.has(entry.name)) return null;

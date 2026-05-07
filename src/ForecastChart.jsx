@@ -63,7 +63,7 @@ function CustomTooltip({ active, payload, label, unit }) {
   if (!active || !payload || payload.length === 0) return null;
 
   return (
-    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg">
+    <Box bg="bg-card" border="1px" borderColor="border-ui" borderRadius="md" p={3} shadow="lg" color="text-heading">
       <Text fontWeight="bold" mb={1}>{formatHour(label)}</Text>
       {payload.map((entry) => (
         <HStack key={entry.dataKey} spacing={2}>
