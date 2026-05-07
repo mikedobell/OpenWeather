@@ -32,6 +32,13 @@ const theme = extendTheme({
       },
     },
   },
+  components: {
+    Heading: {
+      baseStyle: {
+        color: 'text-heading',
+      },
+    },
+  },
 });
 
 export default theme;
