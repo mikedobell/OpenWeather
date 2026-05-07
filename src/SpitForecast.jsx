@@ -177,6 +177,12 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
       <Box h={{ base: '260px', md: '320px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={chartMargin}>
+            <defs>
+              <linearGradient id="gradient-spit-fcst" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={lineColor} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={lineColor} stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis
               dataKey="x"
@@ -214,13 +220,24 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               isAnimationActive={false}
               connectNulls={false}
             />
+            <Area
+              type="monotone"
+              dataKey="avg_fcst"
+              name="Avg (forecast)"
+              stroke={lineColor}
+              strokeWidth={2}
+              fill="url(#gradient-spit-fcst)"
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
             <Line
               type="monotone"
               dataKey="lull_obs"
               name="Lull"
               stroke={lineColor}
               strokeWidth={1}
-              strokeDasharray="2 3"
+              strokeDasharray="1 2"
               dot={false}
               connectNulls={false}
               isAnimationActive={false}
@@ -231,7 +248,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               name="Gust"
               stroke={lineColor}
               strokeWidth={1}
-              strokeDasharray="5 3"
+              strokeDasharray="1 2"
               dot={false}
               connectNulls={false}
               isAnimationActive={false}
@@ -240,16 +257,6 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               type="monotone"
               dataKey="avg_obs"
               name="Avg (obs)"
-              stroke={lineColor}
-              strokeWidth={2}
-              dot={false}
-              connectNulls={false}
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="avg_fcst"
-              name="Avg (forecast)"
               stroke={lineColor}
               strokeWidth={2}
               dot={false}

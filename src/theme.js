@@ -19,7 +19,7 @@ const theme = extendTheme({
       'bg-info': { default: '#EBF8FF', _dark: '#DADBCD' },
       'border-ui': { default: '#E2E8F0', _dark: '#262626' },
       'border-info': { default: '#BEE3F8', _dark: '#31322B' },
-      'text-heading': { default: '#1A202C', _dark: '#282828' },
+      'text-heading': { default: '#282828', _dark: '#282828' },
       'text-muted': { default: '#718096', _dark: '#31322B' },
       accent: { default: '#BD231F', _dark: '#BD231F' },
       warning: { default: '#BE1B17', _dark: '#BE1B17' },

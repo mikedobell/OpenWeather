@@ -184,7 +184,7 @@ export default function App() {
                   key={variable.id}
                   variable={variable}
                   data={data}
-                  observations={variable.id === 'pressure' ? observations : null}
+                  observations={observations}
                   dates={dates}
                   selectedDate={selectedDate}
                   onDateChange={setSelectedDate}

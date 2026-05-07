@@ -408,7 +408,8 @@ function ptHourFromUtc(utcIso) {
 }
 
 function aggregateHourlySwob(features, cfg) {
-  // Group features by PT date+hour, keep the obs closest to top-of-hour with valid pressure.
+  // Group features by PT date+hour, keep the obs closest to top-of-hour. Computes
+  // both MSL pressure and temperature from each feature.
   const byHour = new Map();
   for (const f of features) {
     const props = f.properties || {};
@@ -418,27 +419,36 @@ function aggregateHourlySwob(features, cfg) {
     const stnPres = parseFloat(props.stn_pres);
     const mslp = parseFloat(props.mslp);
     const tempC = parseFloat(props.air_temp);
-    let value;
+
+    let pressure;
     if (cfg.useMslp) {
-      value = isFinite(mslp) ? mslp : null;
+      pressure = isFinite(mslp) ? mslp : null;
     } else {
-      value = isFinite(stnPres) && isFinite(tempC)
+      pressure = isFinite(stnPres) && isFinite(tempC)
         ? reduceToMSL(stnPres, tempC, cfg.elevation)
         : null;
     }
-    if (value == null || !isFinite(value)) continue;
+    const temperature = isFinite(tempC) ? tempC : null;
+    if (pressure == null && temperature == null) continue;
+
     const key = `${ph.date}T${ph.hour}`;
-    const dist = Math.abs(ph.minute - 0); // distance to top-of-hour in minutes
+    const dist = Math.abs(ph.minute - 0);
     const prev = byHour.get(key);
     if (!prev || dist < prev.dist) {
-      byHour.set(key, { date: ph.date, hour: ph.hour, value, dist });
+      byHour.set(key, { date: ph.date, hour: ph.hour, pressure, temperature, dist });
     }
   }
-  return [...byHour.values()].map((o) => ({
-    date: o.date,
-    hour: o.hour,
-    value: Math.round(o.value * 10) / 10,
-  }));
+  const pressureSeries = [];
+  const temperatureSeries = [];
+  for (const o of byHour.values()) {
+    if (o.pressure != null && isFinite(o.pressure)) {
+      pressureSeries.push({ date: o.date, hour: o.hour, value: Math.round(o.pressure * 10) / 10 });
+    }
+    if (o.temperature != null && isFinite(o.temperature)) {
+      temperatureSeries.push({ date: o.date, hour: o.hour, value: Math.round(o.temperature * 10) / 10 });
+    }
+  }
+  return { pressure: pressureSeries, temperature: temperatureSeries };
 }
 
 async function fetchSwobStation(locId, cfg) {
@@ -450,22 +460,24 @@ async function fetchSwobStation(locId, cfg) {
   const bbox = cfg.bbox.join(",");
   const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
   const raw = await httpGet(url);
-  if (!raw) return [];
+  if (!raw) return { pressure: [], temperature: [] };
   let json;
-  try { json = JSON.parse(raw); } catch { return []; }
+  try { json = JSON.parse(raw); } catch { return { pressure: [], temperature: [] }; }
   return aggregateHourlySwob(json.features || [], cfg);
 }
 
 // Pemberton has no SWOB pressure source — scrape weather.gc.ca past_conditions HTML.
+// Same page also exposes temperature (header3m).
 async function fetchPembertonScrape() {
   const raw = await httpGet(
     "https://weather.gc.ca/past_conditions/index_e.html?station=wgp",
     "text/html"
   );
-  if (!raw) return [];
+  if (!raw) return { pressure: [], temperature: [] };
 
   const parts = raw.split(/<tr[^>]*>/);
-  const rows = [];
+  const pressure = [];
+  const temperature = [];
   let curDate = null;
 
   for (const part of parts) {
@@ -477,14 +489,22 @@ async function fetchPembertonScrape() {
       continue;
     }
     const tm = part.match(/headers="header1"[^>]*>\s*(\d{1,2}):(\d{2})/);
-    const pr = part.match(/headers="header9m"[^>]*>\s*([\d.]+)/);
-    if (!tm || !pr || !curDate) continue;
+    if (!tm || !curDate) continue;
     const hour = parseInt(tm[1], 10);
-    const presKpa = parseFloat(pr[1]);
-    if (!isFinite(presKpa)) continue;
-    rows.push({ date: curDate, hour, value: Math.round(presKpa * 10 * 10) / 10 }); // kPa→hPa, 1dp
+
+    const pr = part.match(/headers="header9m"[^>]*>\s*([\d.]+)/);
+    const presKpa = pr ? parseFloat(pr[1]) : NaN;
+    if (isFinite(presKpa)) {
+      pressure.push({ date: curDate, hour, value: Math.round(presKpa * 10 * 10) / 10 }); // kPa→hPa
+    }
+
+    const te = part.match(/headers="header3m"[^>]*>\s*(-?[\d.]+)/);
+    const tempC = te ? parseFloat(te[1]) : NaN;
+    if (isFinite(tempC)) {
+      temperature.push({ date: curDate, hour, value: Math.round(tempC * 10) / 10 });
+    }
   }
-  return rows;
+  return { pressure, temperature };
 }
 
 async function fetchAllObservations() {
@@ -496,7 +516,10 @@ async function fetchAllObservations() {
   await Promise.all(tasks);
 
   const counts = Object.fromEntries(
-    Object.entries(obs).map(([k, v]) => [k, v.length])
+    Object.entries(obs).map(([k, v]) => [
+      k,
+      { pressure: v.pressure?.length || 0, temperature: v.temperature?.length || 0 },
+    ])
   );
   return {
     observations: obs,
@@ -567,7 +590,10 @@ exports.scheduledObsFetch = onSchedule({
     console.log("Scheduled observations fetch starting...");
     try {
       const data = await fetchAllObservations();
-      const totalPoints = Object.values(data.counts).reduce((a, b) => a + b, 0);
+      const totalPoints = Object.values(data.counts).reduce(
+        (a, b) => a + (b.pressure || 0) + (b.temperature || 0),
+        0
+      );
       if (totalPoints === 0) {
         console.warn("Observations fetch returned no data — skipping cache write.");
         return null;

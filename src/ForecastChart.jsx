@@ -18,9 +18,30 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
 import { LOCATIONS } from './constants';
+
+function getCurrentPtHour() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Vancouver',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date()).reduce((acc, p) => (acc[p.type] = p.value, acc), {});
+  return parseInt(parts.hour, 10) + parseInt(parts.minute, 10) / 60;
+}
+
+// Adapter: legacy shape was { locId: [...] } (pressure only); new is
+// { locId: { pressure: [...], temperature: [...] } }. Return the array for the
+// requested variable regardless.
+function obsForVariable(observations, locId, variableId) {
+  const v = observations?.[locId];
+  if (!v) return [];
+  if (Array.isArray(v)) return variableId === 'pressure' ? v : [];
+  return Array.isArray(v[variableId]) ? v[variableId] : [];
+}
 
 function formatHour(hour) {
   if (hour === 12) return '12 PM';
@@ -108,18 +129,11 @@ export default function ForecastChart({ variable, data, observations, dates, sel
   // If no points match (old API without date field), show all points
   const pointsToUse = filteredPoints.length > 0 ? filteredPoints : allPoints;
 
-  // For each location on the pressure chart, find the last hour that has an observation
-  // on the selected date — solid (obs) line ends here, dashed (forecast) starts here.
-  const lastObsHour = {};
-  if (observations && selectedDate) {
-    for (const loc of LOCATIONS) {
-      const obsForLoc = observations[loc.id] || [];
-      const todays = obsForLoc.filter((d) => d.date === selectedDate);
-      if (todays.length > 0) {
-        lastObsHour[loc.id] = Math.max(...todays.map((d) => d.hour));
-      }
-    }
-  }
+  // True when at least one location has observation data for this variable on
+  // selectedDate — drives the dual obs/forecast rendering and the "Forecast →" line.
+  const hasAnyObs = observations && selectedDate && LOCATIONS.some(
+    (loc) => obsForVariable(observations, loc.id, variable.id).some((d) => d.date === selectedDate)
+  );
 
   for (const point of pointsToUse) {
     const row = { hour: point.hour };
@@ -130,17 +144,13 @@ export default function ForecastChart({ variable, data, observations, dates, sel
         : locData.find((d) => d.hour === point.hour);
       const fcstValue = match ? match.value : null;
 
-      if (observations) {
-        const obsForLoc = observations[loc.id] || [];
-        const obsMatch = obsForLoc.find((d) => d.hour === point.hour && d.date === selectedDate);
-        const obsValue = obsMatch ? obsMatch.value : null;
-        const boundary = lastObsHour[loc.id];
-        row[`${loc.id}_obs`] = obsValue;
-        // Forecast line starts 1 hour before the last obs so the final 2 hours show
-        // obs and forecast side by side (lets you eyeball model bias at the handoff).
-        // If no obs for this location, dashed covers all hours.
-        const OVERLAP_HOURS = 2;
-        row[`${loc.id}_fcst`] = boundary == null || point.hour >= boundary - (OVERLAP_HOURS - 1) ? fcstValue : null;
+      if (hasAnyObs) {
+        const obsArr = obsForVariable(observations, loc.id, variable.id);
+        const obsMatch = obsArr.find((d) => d.hour === point.hour && d.date === selectedDate);
+        row[`${loc.id}_obs`] = obsMatch ? obsMatch.value : null;
+        // Forecast line covers all hours so the gradient runs the full day; the
+        // overlaid obs line on past hours lets you see model bias.
+        row[`${loc.id}_fcst`] = fcstValue;
       } else {
         row[loc.id] = fcstValue;
       }
@@ -173,8 +183,8 @@ export default function ForecastChart({ variable, data, observations, dates, sel
       : locData;
     const points = filtered.length > 0 ? filtered : locData;
     allValues = allValues.concat(points.map((d) => d.value).filter((v) => v !== null));
-    if (observations) {
-      const obsForLoc = (observations[loc.id] || []).filter((d) => d.date === selectedDate);
+    if (hasAnyObs) {
+      const obsForLoc = obsForVariable(observations, loc.id, variable.id).filter((d) => d.date === selectedDate);
       allValues = allValues.concat(obsForLoc.map((d) => d.value).filter((v) => v !== null));
     }
   }
@@ -254,16 +264,28 @@ export default function ForecastChart({ variable, data, observations, dates, sel
               hide={isMobile}
             />
             <Tooltip content={<CustomTooltip unit={variable.unit} />} />
+            {hasAnyObs && (() => {
+              const nowHour = getCurrentPtHour();
+              const isToday = chartData.some((d) => d.hour <= nowHour) && chartData.some((d) => d.hour >= nowHour);
+              return isToday ? (
+                <ReferenceLine
+                  x={Math.round(nowHour)}
+                  stroke={textColor}
+                  strokeDasharray="3 3"
+                  label={{ value: 'Forecast →', fill: textColor, fontSize: 11, position: 'insideTopLeft' }}
+                />
+              ) : null;
+            })()}
             {LOCATIONS.map((loc) => {
               const color = isDark ? loc.colorDark : loc.color;
               const isHidden = hiddenSeries.has(loc.id);
-              if (observations) {
+              if (hasAnyObs) {
                 return (
                   <React.Fragment key={loc.id}>
                     <Area
                       type="monotone"
-                      dataKey={`${loc.id}_obs`}
-                      name={`${loc.name} (obs)`}
+                      dataKey={`${loc.id}_fcst`}
+                      name={`${loc.name} (forecast)`}
                       stroke={color}
                       strokeWidth={2}
                       fill={`url(#gradient-${variable.id}-${loc.id})`}
@@ -275,11 +297,10 @@ export default function ForecastChart({ variable, data, observations, dates, sel
                     />
                     <Area
                       type="monotone"
-                      dataKey={`${loc.id}_fcst`}
-                      name={`${loc.name} (forecast)`}
+                      dataKey={`${loc.id}_obs`}
+                      name={`${loc.name} (obs)`}
                       stroke={color}
                       strokeWidth={2}
-                      strokeDasharray="5 4"
                       fill="none"
                       hide={isHidden}
                       dot={false}
