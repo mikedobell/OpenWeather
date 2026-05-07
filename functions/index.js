@@ -525,6 +525,7 @@ async function fetchAllObservations() {
       { pressure: v.pressure?.length || 0, temperature: v.temperature?.length || 0 },
     ])
   );
+  console.log(`Per-station obs counts: ${JSON.stringify(counts)}`);
   return {
     observations: obs,
     counts,
@@ -612,7 +613,7 @@ exports.scheduledObsFetch = onSchedule({
   schedule: "5 * * * *", // every hour at :05
   timeZone: "America/Vancouver",
   timeoutSeconds: 120,
-  memory: "256MiB",
+  memory: "512MiB",
 }, async () => {
     console.log("Scheduled observations fetch starting...");
     try {
