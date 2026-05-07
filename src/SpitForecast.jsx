@@ -38,6 +38,9 @@ function formatDateLabel(dateStr) {
   return `${d} ${months[m - 1]}`;
 }
 
+const KMH_TO_KT = 0.539957;
+const toKt = (v) => (v == null ? null : v * KMH_TO_KT);
+
 // Parse "2026-05-04T08:05:04-07:00" → { date, hourFrac } in local (PT) terms.
 function parseLocalIso(iso) {
   if (!iso) return null;
@@ -62,7 +65,7 @@ function CustomTooltip({ active, payload, label }) {
           <HStack key={entry.dataKey} spacing={2}>
             <Box w={3} h={3} borderRadius="sm" bg={entry.color} />
             <Text fontSize="sm">
-              {entry.name}: <strong>{Math.round(entry.value)} km/h</strong>
+              {entry.name}: <strong>{Math.round(entry.value)} kt</strong>
             </Text>
           </HStack>
         );
@@ -117,9 +120,9 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
     if (!p || p.date !== selectedDate) continue;
     rows.push({
       x: p.hourFrac,
-      avg_obs: o.avg ?? null,
-      gust_obs: o.gust ?? null,
-      lull_obs: o.lull ?? null,
+      avg_obs: toKt(o.avg ?? null),
+      gust_obs: toKt(o.gust ?? null),
+      lull_obs: toKt(o.lull ?? null),
     });
   }
   for (const f of fcst) {
@@ -127,8 +130,8 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
     if (!p || p.date !== selectedDate) continue;
     rows.push({
       x: p.hourFrac,
-      avg_fcst: f.avg_p50 ?? null,
-      ci: [f.avg_ci68_lo ?? null, f.avg_ci68_hi ?? null],
+      avg_fcst: toKt(f.avg_p50 ?? null),
+      ci: [toKt(f.avg_ci68_lo ?? null), toKt(f.avg_ci68_hi ?? null)],
     });
   }
   rows.sort((a, b) => a.x - b.x);
@@ -141,7 +144,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
     <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
         <Box>
-          <Heading size="md" mb={1}>Squamish Spit · Live + Forecast (km/h)</Heading>
+          <Heading size="md" mb={1}>Squamish Spit · Live + Forecast (kt)</Heading>
         </Box>
         {dates && dates.length > 1 && (
           <HStack spacing={1}>
@@ -199,7 +202,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               fontSize={12}
               tick={{ fill: textColor }}
               hide={isMobile}
-              label={isMobile ? null : { value: 'km/h', angle: -90, position: 'insideLeft', fill: textColor, fontSize: 11 }}
+              label={isMobile ? null : { value: 'kt', angle: -90, position: 'insideLeft', fill: textColor, fontSize: 11 }}
             />
             <Tooltip content={<CustomTooltip />} />
             {showCutLine && (
