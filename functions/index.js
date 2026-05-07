@@ -2,11 +2,15 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const { XMLParser } = require("fast-xml-parser");
+const { Storage } = require("@google-cloud/storage");
 const fs = require("fs");
 const path = require("path");
 
 admin.initializeApp();
 const db = admin.firestore();
+const storage = new Storage();
+const ARCHIVE_BUCKET = "openweather-826fc-archive";
+const ARCHIVE_SCHEMA_VERSION = 1;
 
 // ============================================================
 // Configuration
@@ -541,6 +545,28 @@ async function writeCache(key, data) {
   }
 }
 
+// Archive a per-fetch snapshot to GCS for future ML training. Best-effort —
+// failure is logged but doesn't fail the cron run.
+async function archiveSnapshot(dataset, payload) {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-"); // 2026-05-07T22-00-00-000Z
+  const datePrefix = ts.slice(0, 10); // 2026-05-07
+  const objectName = `archive/${dataset}/${datePrefix}/${ts}.json`;
+  const body = JSON.stringify({
+    schema_version: ARCHIVE_SCHEMA_VERSION,
+    archived_at: new Date().toISOString(),
+    dataset,
+    payload,
+  });
+  try {
+    await storage.bucket(ARCHIVE_BUCKET).file(objectName).save(body, {
+      contentType: "application/json",
+      resumable: false,
+    });
+  } catch (err) {
+    console.error(`Archive write failed for "${dataset}": ${err.message || err}`);
+  }
+}
+
 // ============================================================
 // Cloud Functions: Scheduled Pre-fetch
 // ============================================================
@@ -561,6 +587,7 @@ exports.scheduledForecastFetch = onSchedule({
         console.warn(`Forecast fetch had ${errors}/${total} errors (${(errorRate * 100).toFixed(1)}%) — skipping cache write to preserve previous good data.`);
       } else {
         await writeCache("forecast", data);
+        await archiveSnapshot("forecast", data);
         console.log(`Forecast cached: ${total} requests, ${errors} errors`);
       }
     } catch (err) {
@@ -599,6 +626,7 @@ exports.scheduledObsFetch = onSchedule({
         return null;
       }
       await writeCache("observations", data);
+      await archiveSnapshot("observations", data);
       console.log(`Observations cached: ${JSON.stringify(data.counts)}`);
     } catch (err) {
       console.error("Observations fetch/write failed:", err.message || err);
@@ -627,7 +655,9 @@ exports.scheduledSpitFetch = onSchedule({
         console.warn("Spit response missing forecast_hours; skipping cache write.");
         return null;
       }
-      await writeCache("spit", { ...data, mirrored_at: new Date().toISOString() });
+      const spitDoc = { ...data, mirrored_at: new Date().toISOString() };
+      await writeCache("spit", spitDoc);
+      await archiveSnapshot("spit", spitDoc);
       console.log(`Spit cached: obs ${data.obs_recent?.length || 0}, forecast ${data.forecast_hours.length}`);
     } catch (err) {
       console.error("Spit fetch/write failed:", err.message || err);
