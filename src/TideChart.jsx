@@ -142,7 +142,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
     Math.ceil((maxVal + padding) * 10) / 10,
   ];
 
-  const tideColor = isDark ? '#63B3ED' : '#3182CE';
+  const tideColor = '#484848'; // mid-grey shade of #282828
 
   const currentIdx = dates.indexOf(activeDate);
   const hasPrev = currentIdx > 0;

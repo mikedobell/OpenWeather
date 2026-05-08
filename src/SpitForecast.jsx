@@ -80,8 +80,10 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
 
   const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
   const textColor = '#282828'; // text-heading token, same in both modes
-  const lineColor = useColorModeValue('#2B6CB0', '#63B3ED');
-  const bandColor = useColorModeValue('#90CDF4', '#2C5282');
+  // Squamish Spit is in Squamish — share the accent-red highlight with the
+  // Squamish location across the rest of the site.
+  const lineColor = '#BD231F';
+  const bandColor = '#BD231F'; // CI band uses fillOpacity 0.35 for the wash
   const isMobile = useBreakpointValue({ base: true, md: false });
   const chartMargin = isMobile
     ? { top: 5, right: 4, left: -2, bottom: 2 }
