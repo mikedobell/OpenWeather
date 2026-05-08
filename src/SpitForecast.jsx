@@ -160,7 +160,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
                 if (i > 0) onDateChange(dates[i - 1]);
               }}
             />
-            <Text fontSize="sm" fontWeight="semibold" minW="60px" textAlign="center">
+            <Text fontSize="sm" fontWeight="semibold" color="text-heading" minW="60px" textAlign="center">
               {formatDateLabel(selectedDate)}
             </Text>
             <IconButton
