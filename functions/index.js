@@ -10,7 +10,7 @@ admin.initializeApp();
 const db = admin.firestore();
 const storage = new Storage();
 const ARCHIVE_BUCKET = "openweather-826fc-archive";
-const ARCHIVE_SCHEMA_VERSION = 1;
+const ARCHIVE_SCHEMA_VERSION = 2;
 
 // ============================================================
 // Configuration
@@ -33,6 +33,8 @@ const VARIABLES = {
   pressure: "HRDPS.CONTINENTAL_PN",
   temperature: "HRDPS.CONTINENTAL_TT",
   cloud: "HRDPS.CONTINENTAL_NT",
+  wind_speed: "HRDPS.CONTINENTAL_WSPD", // m/s at 10 m
+  wind_dir: "HRDPS.CONTINENTAL_WD",     // degrees at 10 m
 };
 
 // ============================================================
@@ -152,6 +154,10 @@ function convertValue(varId, value) {
     return value > 100 ? Math.round((value - 273.15) * 10) / 10 : Math.round(value * 10) / 10;
   } else if (varId === "cloud") {
     return value <= 1.0 ? Math.round(value * 100) : Math.round(value);
+  } else if (varId === "wind_speed") {
+    return Math.round(value * 10) / 10; // m/s, 1 dp
+  } else if (varId === "wind_dir") {
+    return Math.round(value); // degrees, integer
   }
   return value;
 }
@@ -168,7 +174,7 @@ async function fetchAllForecastData() {
   // Build all fetch promises upfront for parallel execution
   const tasks = [];
   for (const [locId, loc] of Object.entries(LOCATIONS)) {
-    forecast[locId] = { pressure: [], temperature: [], cloud: [] };
+    forecast[locId] = { pressure: [], temperature: [], cloud: [], wind_speed: [], wind_dir: [] };
     for (const [varId, layerName] of Object.entries(VARIABLES)) {
       for (const fh of forecastHours) {
         tasks.push({ locId, varId, fh, url: buildWmsUrl(layerName, loc.lat, loc.lon, fh.utc) });
@@ -412,8 +418,8 @@ function ptHourFromUtc(utcIso) {
 }
 
 function aggregateHourlySwob(features, cfg) {
-  // Group features by PT date+hour, keep the obs closest to top-of-hour. Computes
-  // both MSL pressure and temperature from each feature.
+  // Group features by PT date+hour, keep the obs closest to top-of-hour. Pulls
+  // pressure (MSL), temperature, and 10-min average wind speed/direction.
   const byHour = new Map();
   for (const f of features) {
     const props = f.properties || {};
@@ -423,6 +429,8 @@ function aggregateHourlySwob(features, cfg) {
     const stnPres = parseFloat(props.stn_pres);
     const mslp = parseFloat(props.mslp);
     const tempC = parseFloat(props.air_temp);
+    const wndSpd = parseFloat(props.avg_wnd_spd_10m_pst10mts);
+    const wndDir = parseFloat(props.avg_wnd_dir_10m_pst10mts);
 
     let pressure;
     if (cfg.useMslp) {
@@ -433,26 +441,33 @@ function aggregateHourlySwob(features, cfg) {
         : null;
     }
     const temperature = isFinite(tempC) ? tempC : null;
-    if (pressure == null && temperature == null) continue;
+    const wind_speed = isFinite(wndSpd) ? wndSpd : null; // km/h native
+    const wind_dir = isFinite(wndDir) ? wndDir : null;
+    if (pressure == null && temperature == null && wind_speed == null && wind_dir == null) continue;
 
     const key = `${ph.date}T${ph.hour}`;
     const dist = Math.abs(ph.minute - 0);
     const prev = byHour.get(key);
     if (!prev || dist < prev.dist) {
-      byHour.set(key, { date: ph.date, hour: ph.hour, pressure, temperature, dist });
+      byHour.set(key, { date: ph.date, hour: ph.hour, pressure, temperature, wind_speed, wind_dir, dist });
     }
   }
-  const pressureSeries = [];
-  const temperatureSeries = [];
+  const series = { pressure: [], temperature: [], wind_speed: [], wind_dir: [] };
   for (const o of byHour.values()) {
     if (o.pressure != null && isFinite(o.pressure)) {
-      pressureSeries.push({ date: o.date, hour: o.hour, value: Math.round(o.pressure * 10) / 10 });
+      series.pressure.push({ date: o.date, hour: o.hour, value: Math.round(o.pressure * 10) / 10 });
     }
     if (o.temperature != null && isFinite(o.temperature)) {
-      temperatureSeries.push({ date: o.date, hour: o.hour, value: Math.round(o.temperature * 10) / 10 });
+      series.temperature.push({ date: o.date, hour: o.hour, value: Math.round(o.temperature * 10) / 10 });
+    }
+    if (o.wind_speed != null && isFinite(o.wind_speed)) {
+      series.wind_speed.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_speed * 10) / 10 });
+    }
+    if (o.wind_dir != null && isFinite(o.wind_dir)) {
+      series.wind_dir.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_dir) });
     }
   }
-  return { pressure: pressureSeries, temperature: temperatureSeries };
+  return series;
 }
 
 async function fetchSwobStation(locId, cfg) {
@@ -464,14 +479,59 @@ async function fetchSwobStation(locId, cfg) {
   const bbox = cfg.bbox.join(",");
   const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
   const raw = await httpGet(url);
-  if (!raw) return { pressure: [], temperature: [] };
+  const empty = { pressure: [], temperature: [], wind_speed: [], wind_dir: [] };
+  if (!raw) return empty;
   let json;
-  try { json = JSON.parse(raw); } catch { return { pressure: [], temperature: [] }; }
+  try { json = JSON.parse(raw); } catch { return empty; }
   return aggregateHourlySwob(json.features || [], cfg);
 }
 
+// Pemberton's pressure/temperature scrape doesn't include wind. The PEMBERTON
+// AIRPORT (WINDS) SWOB station 1086081 publishes wind directly — query it
+// separately and merge into the Pemberton observations.
+async function fetchPembertonSwobWind() {
+  const bbox = "-122.748,50.297,-122.736,50.308";
+  const end = new Date();
+  const start = new Date(end.getTime() - 18 * 3600 * 1000);
+  const datetime = `${start.toISOString()}/${end.toISOString()}`;
+  const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
+  const raw = await httpGet(url);
+  const empty = { wind_speed: [], wind_dir: [] };
+  if (!raw) return empty;
+  let json;
+  try { json = JSON.parse(raw); } catch { return empty; }
+
+  const byHour = new Map();
+  for (const f of json.features || []) {
+    const props = f.properties || {};
+    const ts = props["date_tm-value"] || props.obs_date_tm;
+    const ph = ptHourFromUtc(ts);
+    if (!ph) continue;
+    const wndSpd = parseFloat(props.avg_wnd_spd_10m_pst10mts);
+    const wndDir = parseFloat(props.avg_wnd_dir_10m_pst10mts);
+    if (!isFinite(wndSpd) && !isFinite(wndDir)) continue;
+    const key = `${ph.date}T${ph.hour}`;
+    const dist = Math.abs(ph.minute - 0);
+    const prev = byHour.get(key);
+    if (!prev || dist < prev.dist) {
+      byHour.set(key, { date: ph.date, hour: ph.hour, wind_speed: wndSpd, wind_dir: wndDir, dist });
+    }
+  }
+  const series = { wind_speed: [], wind_dir: [] };
+  for (const o of byHour.values()) {
+    if (isFinite(o.wind_speed)) {
+      series.wind_speed.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_speed * 10) / 10 });
+    }
+    if (isFinite(o.wind_dir)) {
+      series.wind_dir.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_dir) });
+    }
+  }
+  return series;
+}
+
 // Pemberton has no SWOB pressure source — scrape weather.gc.ca past_conditions HTML.
-// Same page also exposes temperature (header3m).
+// Same page also exposes temperature (header3m). Wind comes from the separate
+// PEMBERTON AIRPORT (WINDS) SWOB station — see fetchPembertonSwobWind.
 async function fetchPembertonScrape() {
   const raw = await httpGet(
     "https://weather.gc.ca/past_conditions/index_e.html?station=wgp",
@@ -519,10 +579,20 @@ async function fetchAllObservations() {
   tasks.push((async () => { obs.pemberton = await fetchPembertonScrape(); })());
   await Promise.all(tasks);
 
+  // Merge Pemberton wind from the separate WINDS-only station.
+  const pemWind = await fetchPembertonSwobWind();
+  obs.pemberton.wind_speed = pemWind.wind_speed;
+  obs.pemberton.wind_dir = pemWind.wind_dir;
+
   const counts = Object.fromEntries(
     Object.entries(obs).map(([k, v]) => [
       k,
-      { pressure: v.pressure?.length || 0, temperature: v.temperature?.length || 0 },
+      {
+        pressure: v.pressure?.length || 0,
+        temperature: v.temperature?.length || 0,
+        wind_speed: v.wind_speed?.length || 0,
+        wind_dir: v.wind_dir?.length || 0,
+      },
     ])
   );
   console.log(`Per-station obs counts: ${JSON.stringify(counts)}`);
@@ -619,7 +689,7 @@ exports.scheduledObsFetch = onSchedule({
     try {
       const data = await fetchAllObservations();
       const totalPoints = Object.values(data.counts).reduce(
-        (a, b) => a + (b.pressure || 0) + (b.temperature || 0),
+        (a, b) => a + (b.pressure || 0) + (b.temperature || 0) + (b.wind_speed || 0) + (b.wind_dir || 0),
         0
       );
       if (totalPoints === 0) {
