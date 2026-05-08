@@ -84,7 +84,7 @@ function ForecastSection({ sectionKey, section }) {
   return (
     <Box bg={sectionBg} borderRadius="md" p={4}>
       <Flex align="center" gap={2} mb={2} flexWrap="wrap">
-        <Badge colorScheme={config.colorScheme} fontSize="xs">
+        <Badge bg="#BEBEBE" color="#282828" fontSize="xs">
           {config.label}
         </Badge>
         {issuedLine && (

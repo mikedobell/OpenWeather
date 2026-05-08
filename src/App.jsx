@@ -99,7 +99,7 @@ function ModelInfo({ lastUpdated, modelRun, error }) {
         gap={2}
       >
         <HStack spacing={3} flexWrap="wrap">
-          <Badge colorScheme="blue" fontSize="xs">HRDPS</Badge>
+          <Badge bg="#BEBEBE" color="#282828" fontSize="xs">HRDPS</Badge>
           {modelRun && modelRun !== 'demo' && (
             <Text fontSize="xs" color="text-muted">
               Model Run: {modelRun}Z
