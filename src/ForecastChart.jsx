@@ -135,6 +135,16 @@ export default function ForecastChart({ variable, data, observations, dates, sel
     (loc) => obsForVariable(observations, loc.id, variable.id).some((d) => d.date === selectedDate)
   );
 
+  // Per-location last-obs hour, so the forecast can start exactly at the obs
+  // handoff (sharing the obs value at that hour) and the lines connect cleanly.
+  const lastObsHour = {};
+  if (hasAnyObs) {
+    for (const loc of LOCATIONS) {
+      const todays = obsForVariable(observations, loc.id, variable.id).filter((d) => d.date === selectedDate);
+      if (todays.length > 0) lastObsHour[loc.id] = Math.max(...todays.map((d) => d.hour));
+    }
+  }
+
   for (const point of pointsToUse) {
     const row = { hour: point.hour };
     for (const loc of LOCATIONS) {
@@ -147,10 +157,18 @@ export default function ForecastChart({ variable, data, observations, dates, sel
       if (hasAnyObs) {
         const obsArr = obsForVariable(observations, loc.id, variable.id);
         const obsMatch = obsArr.find((d) => d.hour === point.hour && d.date === selectedDate);
-        row[`${loc.id}_obs`] = obsMatch ? obsMatch.value : null;
-        // Drop forecast at hours where obs is present for this location — keeps
-        // the chart legible by showing one line per location per hour.
-        row[`${loc.id}_fcst`] = obsMatch ? null : fcstValue;
+        const obsValue = obsMatch ? obsMatch.value : null;
+        row[`${loc.id}_obs`] = obsValue;
+        const boundary = lastObsHour[loc.id];
+        if (boundary != null && point.hour === boundary) {
+          // Anchor the forecast line at the last obs value so the gradient picks
+          // up exactly where the obs leaves off — no visual gap, no discontinuity.
+          row[`${loc.id}_fcst`] = obsValue;
+        } else if (obsMatch) {
+          row[`${loc.id}_fcst`] = null;
+        } else {
+          row[`${loc.id}_fcst`] = fcstValue;
+        }
       } else {
         row[loc.id] = fcstValue;
       }
