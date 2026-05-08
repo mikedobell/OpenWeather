@@ -25,7 +25,8 @@ Forecast data come from the HRDPS (~2.5 km resolution, 48 h ahead, updated 4×/d
 | Pam Rocks | 49.4883 | -123.2983 | Sea level | Howe Sound mouth, marine reference |
 | Squamish | 49.7016 | -123.1558 | ~60 m | Valley floor, convergence zone |
 | Whistler | 50.1163 | -122.9574 | ~670 m | Mountain base, alpine influence |
-| Lillooet | 50.6868 | -121.9422 | ~250 m | Interior, dry/hot, pressure source |
+| Pemberton | 50.3192 | -122.8035 | ~210 m | Inland valley, dominant interior reference |
+| Lillooet | 50.6868 | -121.9422 | ~250 m | Far interior, dry/hot, pressure source |
 
 ## Data Sources
 
@@ -81,32 +82,47 @@ GET https://geo.weather.gc.ca/geomet?
 - **Sections**: Warnings, Forecast (near-term winds), Weather & Visibility, Extended Forecast
 - **Caching**: Pre-fetched every 3 hours via Cloud Scheduler, stored in Firestore
 
+### 4. Surface Observations (ECCC SWOB-realtime + scrape)
+
+- **Sources**: SWOB-realtime via MSC GeoMet OGC API (`api.weather.gc.ca/collections/swob-realtime`) for Pam Rocks, Squamish Airport, Whistler-Nesters, Lillooet; HTML scrape of `weather.gc.ca/past_conditions/?station=wgp` for Pemberton (no SWOB pressure source exists for Pemberton)
+- **Variables**: MSL pressure (hPa) and air temperature (°C). Squamish/Whistler report station pressure only — reduced to MSL via observed temperature + station elevation
+- **Cadence**: Hourly, aggregated to one observation per hour closest to top-of-hour
+- **Caching**: Pre-fetched every hour via Cloud Scheduler; stored in Firestore as `cache/observations` with shape `{ <locId>: { pressure: [...], temperature: [...] } }`
+- **Display**: Solid line (no fill) overlaid on the forecast gradient on the same chart, with a vertical "Forecast →" reference line at the current PT hour
+- **Cloud cover obs**: not implemented — coverage is uneven across stations and Pemberton has only text "Conditions" with no clean machine-readable mapping
+
+### 5. Squamish Spit ML Forecast (paraglidingwx.com mirror)
+
+- **Source**: `https://www.paraglidingwx.com/api/spit-forecast` — Trevor Wood's "SpitBiGRU" ML wind forecast for Squamish Spit, plus 24 h of 5-minute WeatherFlow station observations
+- **Variables**: Avg / Gust / Lull (km/h, converted to knots for display) + ML mean with 68 % confidence interval
+- **Caching**: Hourly mirror to Firestore `cache/spit`. Browser reads from Firestore — never hits the upstream
+- **Attribution**: Source link to paraglidingwx.com is shown beneath the chart
+
 ## Technical Architecture
 
 ### Frontend (Static Build)
 
 - **Framework**: React 18 + Vite (builds to static HTML/JS/CSS)
-- **UI Library**: Chakra UI v2 (layout, theming, dark/light mode)
-- **Charts**: Recharts (AreaChart with tooltips, legends, series toggling)
-- **Lazy Loading**: ForecastChart, TideChart, MarineForecast loaded via React.lazy() to reduce initial bundle
+- **UI Library**: Chakra UI v2 with semantic design tokens defined in `src/theme.js` (`bg-card`, `text-heading`, `accent`, etc.) — fonts and colours managed via the pencil.dev MCP design pipeline
+- **Charts**: Recharts (AreaChart for HRDPS/tide, ComposedChart for Spit)
+- **Lazy Loading**: ForecastChart, TideChart, SpitForecast, SpitSummary, MarineForecast all loaded via `React.lazy()` to keep initial bundle small
 - **Base Path**: Vite `base: '/'` — served from Firebase CDN root
 - **Code Splitting**: Separate chunks for vendor (React), chakra, and charts (deferred)
-- **Fallback**: Client-side demo data generated if HRDPS API returns an error
-- **Multi-day Pagination**: Shared `selectedDate` state synchronizes all charts with `< 11 Feb >` navigation
+- **Fallback**: Client-side demo data generated if Firestore forecast cache is unavailable
+- **Multi-day Pagination**: Shared `selectedDate` state synchronizes the HRDPS, tide, and Spit charts; today + tomorrow only
 - **Mobile Optimized**: Reduced chart margins and hidden Y-axis labels on small screens
 
 ### Backend (Firebase Cloud Functions)
 
-- **Runtime**: Node.js 20 on Firebase Cloud Functions
-- **HTTP Endpoints** (rewrites from `/api/*`):
-  - `forecast` — serves pre-fetched HRDPS data from Firestore cache
-  - `marine` — serves pre-fetched EC marine forecast from Firestore cache
-  - `tide` — reads bundled CSV, returns JSON (no cache needed)
+- **Runtime**: Node.js 22 on Firebase Cloud Functions Gen 2
+- **Frontend reads Firestore directly** via the Firebase JS SDK — there are no live HTTP endpoints anymore (the legacy `/api/*` rewrites are unused; PHP files retained for reference only)
 - **Scheduled Functions** (Cloud Scheduler):
-  - `scheduledForecastFetch` — runs 4×/day (UTC 4,10,16,22), batches ~180 parallel WMS requests to GeoMet, stores in Firestore
-  - `scheduledMarineFetch` — runs every 3 hours, fetches EC RSS, parses XML, stores in Firestore
-- **Cache**: Firestore `cache/forecast` and `cache/marine` documents
-- **CORS**: Functions set `Access-Control-Allow-Origin: *` headers
+  - `scheduledForecastFetch` — runs 4×/day at 04/10/16/22 PT; batches ~450 parallel WMS requests to GeoMet (5 locations × 3 vars × 30 hours); writes `cache/forecast` and `cache/tide`
+  - `scheduledObsFetch` — hourly at `:05` PT; pulls SWOB-realtime + Pemberton scrape, computes MSL pressure + temperature; writes `cache/observations` (memory: 512 MiB)
+  - `scheduledSpitFetch` — hourly at `:10` PT; mirrors paraglidingwx.com Spit forecast; writes `cache/spit`
+  - `scheduledMarineFetch` — every 3 hours at `:30` PT; fetches EC RSS, parses XML, writes `cache/marine`
+- **Cache**: Firestore documents under `cache/{forecast,observations,spit,tide,marine}` — each is a rolling window overwritten on every cron tick
+- **Archive**: Per-fetch JSON snapshots written to `gs://openweather-826fc-archive/archive/<dataset>/<date>/<ts>.json` for `forecast`, `observations`, `spit`. Lifecycle: Standard → Coldline @ 30 d → Archive @ 90 d. Intended for ML training; not website-accessible
 
 ### Hosting: Firebase
 
@@ -119,27 +135,34 @@ GET https://geo.weather.gc.ca/geomet?
 
 ### On Page Load
 
-1. Frontend requests `/api/forecast` for HRDPS data (served from Firestore cache)
-2. Frontend requests `/api/tide` for tide predictions (served from bundled CSV)
-3. Frontend requests `/api/marine` for marine forecast text (served from Firestore cache)
-4. Cloud Functions read pre-cached data from Firestore — instant response
-5. Fallback: if Firestore cache empty, functions fetch live data and populate cache
-6. Frontend renders all charts and marine forecast sections
+1. Frontend reads `cache/forecast`, `cache/observations`, `cache/tide`, `cache/spit`, and `cache/marine` directly from Firestore via the Firebase JS SDK
+2. Components are lazy-loaded; charts render as soon as their respective cache document is read
+3. Fallback: if `cache/forecast` is missing or empty, the frontend generates synthetic demo data so the chart is still navigable
+4. Pemberton's `cache/observations` series may be briefly empty after a Pemberton-side scrape failure — the chart renders forecast-only for that location until the next hourly cron succeeds
 
 ### HRDPS Charts
 
 - **Three stacked area charts**: one each for pressure (hPa), temperature (°C), cloud cover (%)
-- **Multi-day pagination**: `< prev | 11 Feb | next >` navigation on each chart, synchronized
-- **X-axis**: Time from 07:00 to 21:00 Pacific Time, labeled hourly
+- **Multi-day pagination**: `< prev | 11 Feb | next >` navigation, synchronized via shared `selectedDate` across all charts
+- **X-axis**: 07:00–21:00 Pacific Time, labeled hourly
 - **Y-axis**: Appropriate scale per variable with units (hidden on mobile)
-- **Series**: Each location is a separate series with distinct color
-- **Colors**: Gradient from light to dark representing coast → interior:
-  - Pam Rocks: Light blue (`#63B3ED`)
-  - Squamish: Medium blue (`#3182CE`)
-  - Whistler: Dark blue (`#2C5282`)
-  - Lillooet: Navy (`#1A365D`)
-- **Tooltips**: Show exact values on hover
-- **Legend**: Clickable tags to toggle series visibility
+- **Series**: One per location, gradient blue palette light→dark representing coast → interior (Pam Rocks → Squamish → Whistler → Pemberton → Lillooet). Whistler and Lillooet are hidden by default to reduce visual noise — clickable legend tags toggle visibility
+- **Visual language**: Forecast = solid line + gradient fill below. Observations (pressure + temperature only) = solid line, no fill, overlaid on the forecast for past hours. A vertical "Forecast →" reference line marks the current PT hour on charts that have observations
+- **Tooltips**: Card-styled hover with exact values, pinned to `text-heading` colour for legibility on the light card background
+
+### Squamish Spit Forecast
+
+- **ComposedChart** showing 24 h spanning today (or tomorrow) with mirrored data from paraglidingwx.com
+- **Past obs** (~5-min resolution): Avg solid line + gradient fill, Gust + Lull as 1,2-dashed thin lines
+- **Forecast**: Avg solid line with shaded 68 % confidence band
+- **"Forecast →" vertical line** at the model's `t_cut_local_hour`
+- **Units**: Knots (km/h converted on the client)
+- **Date pagination**: shares `selectedDate` with HRDPS/tide charts
+
+### Squamish Spit Live Summary
+
+- **Top-of-page info box** (similar style to the HRDPS model-info box) showing the latest Spit observation as `Squamish Spit (knots): <avg>, <gust>` with the numbers in the accent red token
+- **Source**: latest entry in `cache/spit.obs_recent` (refreshed hourly with the rest of the Spit chart)
 
 ### Tide Chart
 
@@ -180,28 +203,28 @@ GET https://geo.weather.gc.ca/geomet?
 
 | File | Purpose |
 |------|---------|
-| `src/App.jsx` | Main layout: header, charts, tide, marine forecast, footer |
-| `src/ForecastChart.jsx` | Reusable HRDPS area chart with series toggling and date nav |
+| `src/App.jsx` | Main layout: header, summary box, charts, marine forecast, footer |
+| `src/ForecastChart.jsx` | HRDPS area chart with obs overlay, "Forecast →" reference line, series toggling, date nav |
 | `src/TideChart.jsx` | Tide prediction area chart with date nav |
+| `src/SpitForecast.jsx` | Squamish Spit ComposedChart (knots) — obs + ML forecast + 68 % CI band |
+| `src/SpitSummary.jsx` | Top-of-page live readings box (avg + gust in knots) |
 | `src/MarineForecast.jsx` | EC marine forecast text display |
-| `src/useForecastData.js` | HRDPS data fetching hook with demo fallback |
-| `src/constants.js` | Locations, variables, API endpoint config |
-| `src/theme.js` | Chakra UI theme (dark mode default) |
-| `functions/index.js` | Cloud Functions: HTTP endpoints + scheduled pre-fetch |
-| `functions/package.json` | Cloud Functions dependencies |
+| `src/useForecastData.js` | Forecast + observations Firestore reader with demo fallback |
+| `src/constants.js` | Locations + variables config |
+| `src/theme.js` | Chakra theme: design tokens, fonts, global Heading colour |
+| `functions/index.js` | Cloud Functions: scheduled pre-fetchers + GCS archive helper |
+| `functions/package.json` | Cloud Functions dependencies (incl. `@google-cloud/storage`) |
 | `functions/07811_data.csv` | CHS tide data bundled with Cloud Function |
 | `firebase.json` | Firebase project config: hosting, rewrites, functions |
+| `firestore.rules` | Public reads on `cache/{document}`, no writes (admin SDK bypasses) |
 | `.firebaserc` | Firebase project ID reference |
 | `vite.config.js` | Build config with `/` base path and code splitting |
-| `api/forecast.php` | Legacy PHP proxy (retained for reference) |
-| `api/marine.php` | Legacy PHP proxy (retained for reference) |
-| `api/tide.php` | Legacy PHP endpoint (retained for reference) |
+| `api/*.php` | Legacy PHP proxies, retained for reference, no longer used |
 
 ## Out of Scope
 
-- Wind speed/direction display
 - Interactive maps
 - User accounts or personalization
 - Push notifications
-- Additional forecast models beyond HRDPS
-- Historical data storage or trends
+- Additional forecast models beyond HRDPS and the mirrored Spit ML forecast
+- Long-term historical data on the website (the GCS archive is for offline ML training only)

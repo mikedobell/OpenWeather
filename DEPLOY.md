@@ -3,16 +3,26 @@
 ## Architecture
 
 ```
-Firebase Hosting (CDN)          Cloud Functions (Node.js 20)
-├── index.html                  ├── scheduledForecastFetch — cron: pre-fetches HRDPS 4×/day
-└── assets/*.js, *.css          │     └── also caches tide CSV data
-                                └── scheduledMarineFetch   — cron: pre-fetches marine 4×/day
+Firebase Hosting (CDN)          Cloud Functions (Node.js 22, Gen 2)
+├── index.html                  ├── scheduledForecastFetch  — 4×/day, HRDPS + tide CSV
+└── assets/*.js, *.css          ├── scheduledObsFetch       — hourly :05, SWOB obs (512 MiB)
+                                ├── scheduledSpitFetch      — hourly :10, paraglidingwx mirror
+                                └── scheduledMarineFetch    — every 3 h :30, EC RSS
                                         │
+                                        │ each writes to:
                                         ▼
-                                   Firestore (cache)          ◄─── React frontend
-                                   ├── cache/forecast              reads directly
-                                   ├── cache/marine                via Firebase SDK
-                                   └── cache/tide
+                                   Firestore (cache)            ◄─── React frontend
+                                   ├── cache/forecast               reads directly
+                                   ├── cache/observations           via Firebase JS SDK
+                                   ├── cache/spit
+                                   ├── cache/tide
+                                   └── cache/marine
+                                        │
+                                        │ + per-fetch JSON snapshot:
+                                        ▼
+                                   gs://openweather-826fc-archive
+                                   └── archive/<dataset>/<date>/<ts>.json
+                                       (Standard → Coldline @ 30d → Archive @ 90d)
 ```
 
 ## Prerequisites
@@ -118,15 +128,41 @@ firebase deploy --only firestore
 
 ### Pre-fetched Data (the key optimization)
 
-Instead of fetching HRDPS data during user page loads:
+Instead of fetching upstream data during user page loads:
 
-1. **`scheduledForecastFetch`** runs 4×/day via Cloud Scheduler (4am, 10am, 4pm, 10pm PT)
-   - Makes ~360 parallel WMS requests to GeoMet (batched 20 at a time)
-   - Stores the complete forecast JSON in Firestore `cache/forecast`
-   - Also parses `07811_data.csv` and stores tide data in Firestore `cache/tide`
-2. **`scheduledMarineFetch`** runs every 3 hours
-   - Fetches EC RSS feed, parses XML, stores in Firestore `cache/marine`
-3. When a user visits, the React app reads all three cache documents directly from Firestore via the Firebase JS SDK — **instant response, no Cloud Function invocation at page load**
+1. **`scheduledForecastFetch`** runs 4×/day at 04/10/16/22 PT
+   - ~450 parallel WMS requests to GeoMet (5 locations × 3 vars × 30 hours, batched 20 at a time)
+   - Writes Firestore `cache/forecast` and `cache/tide` (parsed from bundled `07811_data.csv`)
+2. **`scheduledObsFetch`** runs hourly at `:05` PT
+   - Pulls 18 h of SWOB-realtime per station (datetime range, not raw `limit` — see memory notes for the cadence gotcha)
+   - Reduces stn_pres → MSL for Squamish/Whistler using observed temp + station elevation
+   - Scrapes `weather.gc.ca/past_conditions/?station=wgp` for Pemberton (no SWOB pressure source exists there)
+   - Writes Firestore `cache/observations` with shape `{ <locId>: { pressure, temperature } }`
+   - **Function memory is 512 MiB (not the default 256)** — at 256 MiB the `@google-cloud/storage` SDK starves the parallel fetches and silently times them out
+3. **`scheduledSpitFetch`** runs hourly at `:10` PT
+   - Mirrors `https://www.paraglidingwx.com/api/spit-forecast` into `cache/spit`
+   - Browsers read from Firestore — they never hit paraglidingwx directly
+4. **`scheduledMarineFetch`** runs every 3 hours at `:30` PT
+   - Fetches EC RSS, parses XML, writes `cache/marine`
+5. When a user visits, the React app reads all five cache documents directly from Firestore via the Firebase JS SDK — **instant response, no Cloud Function invocation at page load**
+
+### ML training data archive
+
+In addition to the Firestore cache, every `forecast`, `observations`, and `spit` fetch also writes an immutable JSON snapshot to `gs://openweather-826fc-archive/archive/<dataset>/<YYYY-MM-DD>/<ISO-ts>.json`. Tide and marine are not archived (tide is deterministic from a static CSV; marine is text with low ML signal).
+
+- **Schema**: `{ schema_version: 1, archived_at, dataset, payload: <same shape as the Firestore cache doc> }`. Bump `ARCHIVE_SCHEMA_VERSION` in `functions/index.js` when changing payload shape.
+- **Lifecycle**: Standard → Coldline @ 30 days → Archive @ 90 days (set via `gcloud storage buckets update --lifecycle-file`).
+- **IAM**: function service account has `roles/storage.objectAdmin` *scoped to the archive bucket only*. The project-wide grant is still `storage.objectViewer`.
+- **Annual cost**: rounds to <$0.01 (storage tiny + lifecycle cheap; Class A ops within free tier).
+- **Retrieval**: `gsutil -m cp -r gs://openweather-826fc-archive/archive/ ./local/` pulls everything in one shot when training begins.
+
+### Common pitfalls (additions)
+
+| Error | Cause | Fix |
+|---|---|---|
+| `scheduledObsFetch` logs `Observations fetch returned no data — skipping cache write` repeatedly | Function under-memoried (256 MiB) with `@google-cloud/storage` loaded | Keep `memory: "512MiB"` on that function in `functions/index.js` |
+| `Archive write failed for "<dataset>"` in function logs | IAM regression on the archive bucket, or lifecycle rule deleting the bucket | `gcloud storage buckets get-iam-policy gs://openweather-826fc-archive` and re-grant `roles/storage.objectAdmin` to the function SA |
+| Index.html serving stale references after deploy | Default 1 h cache on `index.html` (only `*.js`/`*.css` are immutable) | Hard-refresh, or add an explicit `cache-control: no-cache` header for `index.html` in `firebase.json` |
 
 ### Request Flow
 
