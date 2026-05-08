@@ -161,11 +161,12 @@ export default function ForecastChart({ variable, data, observations, dates, sel
         const obsMatch = obsArr.find((d) => d.hour === point.hour && d.date === selectedDate);
         row[`${loc.id}_obs`] = obsMatch ? obsMatch.value : null;
         const boundary = lastObsHour[loc.id];
-        const isBoundary = boundary != null && point.hour === boundary;
-        // Render forecast at any hour without obs, AND at the boundary hour itself
-        // (so obs and forecast both sit at that hour — the vertical gap between
-        // them surfaces the model-vs-actual offset rather than hiding it).
-        row[`${loc.id}_fcst`] = !obsMatch || isBoundary ? fcstValue : null;
+        // Forecast renders only AT or AFTER the last-obs hour for this location.
+        // Hours before boundary stay forecast-null even if obs has a gap there —
+        // we don't want forecast leaking into the middle of the obs series.
+        // At the boundary, both obs and forecast render so the vertical gap
+        // between them surfaces the model-vs-actual offset.
+        row[`${loc.id}_fcst`] = (boundary == null || point.hour >= boundary) ? fcstValue : null;
       } else {
         row[loc.id] = fcstValue;
       }
@@ -280,16 +281,21 @@ export default function ForecastChart({ variable, data, observations, dates, sel
             />
             <Tooltip content={<CustomTooltip unit={variable.unit} />} />
             {hasAnyObs && (() => {
-              const nowHour = getCurrentPtHour();
-              const isToday = chartData.some((d) => d.hour <= nowHour) && chartData.some((d) => d.hour >= nowHour);
-              return isToday ? (
+              // Place the line at the latest obs boundary among currently-visible
+              // locations — "where the obs hands off to forecast".
+              const visibleBoundaries = LOCATIONS
+                .filter((loc) => !hiddenSeries.has(loc.id))
+                .map((loc) => lastObsHour[loc.id])
+                .filter((h) => h != null);
+              if (visibleBoundaries.length === 0) return null;
+              return (
                 <ReferenceLine
-                  x={Math.round(nowHour)}
+                  x={Math.max(...visibleBoundaries)}
                   stroke={textColor}
                   strokeDasharray="3 3"
                   label={{ value: 'Forecast →', fill: textColor, fontSize: 11, position: 'insideTopLeft' }}
                 />
-              ) : null;
+              );
             })()}
             {LOCATIONS.map((loc) => {
               const color = isDark ? loc.colorDark : loc.color;
