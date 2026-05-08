@@ -157,18 +157,13 @@ export default function ForecastChart({ variable, data, observations, dates, sel
       if (hasAnyObs) {
         const obsArr = obsForVariable(observations, loc.id, variable.id);
         const obsMatch = obsArr.find((d) => d.hour === point.hour && d.date === selectedDate);
-        const obsValue = obsMatch ? obsMatch.value : null;
-        row[`${loc.id}_obs`] = obsValue;
+        row[`${loc.id}_obs`] = obsMatch ? obsMatch.value : null;
         const boundary = lastObsHour[loc.id];
-        if (boundary != null && point.hour === boundary) {
-          // Anchor the forecast line at the last obs value so the gradient picks
-          // up exactly where the obs leaves off — no visual gap, no discontinuity.
-          row[`${loc.id}_fcst`] = obsValue;
-        } else if (obsMatch) {
-          row[`${loc.id}_fcst`] = null;
-        } else {
-          row[`${loc.id}_fcst`] = fcstValue;
-        }
+        const isBoundary = boundary != null && point.hour === boundary;
+        // Render forecast at any hour without obs, AND at the boundary hour itself
+        // (so obs and forecast both sit at that hour — the vertical gap between
+        // them surfaces the model-vs-actual offset rather than hiding it).
+        row[`${loc.id}_fcst`] = !obsMatch || isBoundary ? fcstValue : null;
       } else {
         row[loc.id] = fcstValue;
       }
