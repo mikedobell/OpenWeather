@@ -79,7 +79,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
   const [error, setError] = useState(null);
 
   const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
-  const textColor = useColorModeValue('#4A5568', '#31322B');
+  const textColor = '#282828'; // text-heading token, same in both modes
   const lineColor = useColorModeValue('#2B6CB0', '#63B3ED');
   const bandColor = useColorModeValue('#90CDF4', '#2C5282');
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -153,6 +153,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               icon={<ChevronLeftIcon boxSize={5} />}
               size="sm"
               variant="ghost"
+              color="text-heading"
               isDisabled={dates.indexOf(selectedDate) <= 0}
               onClick={() => {
                 const i = dates.indexOf(selectedDate);
@@ -167,6 +168,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
               icon={<ChevronRightIcon boxSize={5} />}
               size="sm"
               variant="ghost"
+              color="text-heading"
               isDisabled={dates.indexOf(selectedDate) >= dates.length - 1}
               onClick={() => {
                 const i = dates.indexOf(selectedDate);

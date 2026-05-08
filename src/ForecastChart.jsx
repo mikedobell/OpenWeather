@@ -88,6 +88,7 @@ function DateNav({ dates, selectedDate, onDateChange }) {
         icon={<ChevronLeftIcon boxSize={5} />}
         size="sm"
         variant="ghost"
+        color="text-heading"
         isDisabled={!hasPrev}
         onClick={() => hasPrev && onDateChange(dates[currentIdx - 1])}
       />
@@ -99,6 +100,7 @@ function DateNav({ dates, selectedDate, onDateChange }) {
         icon={<ChevronRightIcon boxSize={5} />}
         size="sm"
         variant="ghost"
+        color="text-heading"
         isDisabled={!hasNext}
         onClick={() => hasNext && onDateChange(dates[currentIdx + 1])}
       />
@@ -110,7 +112,7 @@ export default function ForecastChart({ variable, data, observations, dates, sel
   const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['whistler', 'lillooet']));
   const isDark = useColorModeValue(false, true);
   const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
-  const textColor = useColorModeValue('#4A5568', '#31322B');
+  const textColor = '#282828'; // text-heading token, same in both modes
   const isMobile = useBreakpointValue({ base: true, md: false });
   const chartMargin = isMobile
     ? { top: 2, right: 4, left: -2, bottom: 2 }

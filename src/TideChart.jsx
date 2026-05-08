@@ -66,7 +66,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
 
   const isDark = useColorModeValue(false, true);
   const gridColor = useColorModeValue('#E2E8F0', '#EDEEE4');
-  const textColor = useColorModeValue('#4A5568', '#31322B');
+  const textColor = '#282828'; // text-heading token, same in both modes
   const isMobile = useBreakpointValue({ base: true, md: false });
   const chartMargin = isMobile
     ? { top: 2, right: 4, left: -2, bottom: 2 }
@@ -161,6 +161,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
               icon={<ChevronLeftIcon boxSize={5} />}
               size="sm"
               variant="ghost"
+              color="text-heading"
               isDisabled={!hasPrev}
               onClick={() => hasPrev && onDateChange(dates[currentIdx - 1])}
             />
@@ -172,6 +173,7 @@ export default function TideChart({ selectedDate, onDateChange, dates: externalD
               icon={<ChevronRightIcon boxSize={5} />}
               size="sm"
               variant="ghost"
+              color="text-heading"
               isDisabled={!hasNext}
               onClick={() => hasNext && onDateChange(dates[currentIdx + 1])}
             />
