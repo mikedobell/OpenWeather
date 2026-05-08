@@ -39,7 +39,6 @@ export default function SpitSummary() {
   const avg = Math.round(toKt(latest.avg ?? 0));
   const gust = Math.round(toKt(latest.gust ?? 0));
   const dir = degToCardinal(latest.dir);
-  const tideStr = tide != null ? ` Tide ${tide.toFixed(1)}m` : '';
 
   return (
     <Flex
@@ -56,9 +55,13 @@ export default function SpitSummary() {
       <Heading size="md" m={0}>
         Squamish Spit:{' '}
         <Text as="span" color="accent">
-          {avg}(g{gust}){dir ? ` ${dir}` : ''}
+          {avg} (g{gust}){dir ? ` ${dir}` : ''}
         </Text>
-        {tideStr}
+        {tide != null && (
+          <Text as="span" fontSize="sm" fontWeight="normal" ml={2}>
+            Tide {tide.toFixed(1)}m
+          </Text>
+        )}
       </Heading>
     </Flex>
   );
