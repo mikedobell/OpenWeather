@@ -148,9 +148,9 @@ export default function ForecastChart({ variable, data, observations, dates, sel
         const obsArr = obsForVariable(observations, loc.id, variable.id);
         const obsMatch = obsArr.find((d) => d.hour === point.hour && d.date === selectedDate);
         row[`${loc.id}_obs`] = obsMatch ? obsMatch.value : null;
-        // Forecast line covers all hours so the gradient runs the full day; the
-        // overlaid obs line on past hours lets you see model bias.
-        row[`${loc.id}_fcst`] = fcstValue;
+        // Drop forecast at hours where obs is present for this location — keeps
+        // the chart legible by showing one line per location per hour.
+        row[`${loc.id}_fcst`] = obsMatch ? null : fcstValue;
       } else {
         row[loc.id] = fcstValue;
       }
