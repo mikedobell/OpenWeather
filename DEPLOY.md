@@ -150,7 +150,10 @@ Instead of fetching upstream data during user page loads:
 
 In addition to the Firestore cache, every `forecast`, `observations`, and `spit` fetch also writes an immutable JSON snapshot to `gs://openweather-826fc-archive/archive/<dataset>/<YYYY-MM-DD>/<ISO-ts>.json`. Tide and marine are not archived (tide is deterministic from a static CSV; marine is text with low ML signal).
 
-- **Schema**: `{ schema_version: 1, archived_at, dataset, payload: <same shape as the Firestore cache doc> }`. Bump `ARCHIVE_SCHEMA_VERSION` in `functions/index.js` when changing payload shape.
+- **Schema**: `{ schema_version: <int>, archived_at, dataset, payload: <same shape as the Firestore cache doc> }`. Bump `ARCHIVE_SCHEMA_VERSION` in `functions/index.js` when changing payload shape.
+  - `1` — initial: pressure/temperature/cloud forecasts, pressure/temperature obs, verbatim Spit mirror.
+  - `2` (2026-05-08+) — adds `wind_speed` (m/s) and `wind_dir` (deg) to HRDPS forecast at all 5 locations; adds `wind_speed` (km/h native) and `wind_dir` (deg) to SWOB obs **only at Pam Rocks and Squamish** (other stations omit the keys entirely — Whistler/Lillooet SWOB don't populate the wind fields and Pemberton wind was scoped out).
+- **Wind units intentionally vary by source**: HRDPS forecast = m/s, SWOB obs = km/h native, Spit (obs + forecast) = km/h native. Keeping native units in the archive avoids conversion bugs; convert at training time as needed.
 - **Lifecycle**: Standard → Coldline @ 30 days → Archive @ 90 days (set via `gcloud storage buckets update --lifecycle-file`).
 - **IAM**: function service account has `roles/storage.objectAdmin` *scoped to the archive bucket only*. The project-wide grant is still `storage.objectViewer`.
 - **Annual cost**: rounds to <$0.01 (storage tiny + lifecycle cheap; Class A ops within free tier).

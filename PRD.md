@@ -122,7 +122,7 @@ GET https://geo.weather.gc.ca/geomet?
   - `scheduledSpitFetch` — hourly at `:10` PT; mirrors paraglidingwx.com Spit forecast; writes `cache/spit`
   - `scheduledMarineFetch` — every 3 hours at `:30` PT; fetches EC RSS, parses XML, writes `cache/marine`
 - **Cache**: Firestore documents under `cache/{forecast,observations,spit,tide,marine}` — each is a rolling window overwritten on every cron tick
-- **Archive**: Per-fetch JSON snapshots written to `gs://openweather-826fc-archive/archive/<dataset>/<date>/<ts>.json` for `forecast`, `observations`, `spit`. Lifecycle: Standard → Coldline @ 30 d → Archive @ 90 d. Intended for ML training; not website-accessible
+- **Archive**: Per-fetch JSON snapshots written to `gs://openweather-826fc-archive/archive/<dataset>/<date>/<ts>.json` for `forecast`, `observations`, `spit`. Includes wind speed + direction (HRDPS at all 5 locations, SWOB obs at Pam Rocks and Squamish only). Lifecycle: Standard → Coldline @ 30 d → Archive @ 90 d. Intended for ML training; not website-accessible
 
 ### Hosting: Firebase
 
