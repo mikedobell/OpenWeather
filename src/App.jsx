@@ -165,16 +165,6 @@ export default function App() {
           <PamRocksSummary />
         </Suspense>
 
-        {/* Intro text */}
-        <Box mb={6}>
-          <Text fontSize="sm" color="text-muted" mb={4}>
-            HRDPS forecast data for four locations along the Sea to Sky corridor — from the coast to the interior. Compare pressure, temperature, and cloud cover to anticipate thermal wind patterns.
-          </Text>
-          <ModelInfo lastUpdated={lastUpdated} modelRun={modelRun} error={error} />
-        </Box>
-
-        <Divider mb={6} />
-
         {/* Charts */}
         {loading ? (
           <Flex justify="center" align="center" minH="400px">
@@ -214,6 +204,17 @@ export default function App() {
             </Box>
           </Suspense>
         )}
+
+        <Divider my={6} />
+
+        {/* About — moved here from the top so the wind data is the first thing
+            users see on load. */}
+        <Box mb={6}>
+          <Text fontSize="sm" color="text-muted" mb={4}>
+            HRDPS forecast data for four locations along the Sea to Sky corridor — from the coast to the interior. Compare pressure, temperature, and cloud cover to anticipate thermal wind patterns.
+          </Text>
+          <ModelInfo lastUpdated={lastUpdated} modelRun={modelRun} error={error} />
+        </Box>
       </Container>
 
       <Footer />
