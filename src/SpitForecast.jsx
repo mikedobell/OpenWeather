@@ -146,7 +146,7 @@ export default function SpitForecast({ dates, selectedDate, onDateChange }) {
     <Box bg="bg-card" borderRadius="xl" p={{ base: 4, md: 6 }} shadow="md" mb={6}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
         <Box>
-          <Heading size="md" mb={1}>Squamish Spit · Live + Forecast (kt)</Heading>
+          <Heading size="md" mb={1}>Squamish Spit (kt)</Heading>
         </Box>
         {dates && dates.length > 1 && (
           <HStack spacing={1}>
