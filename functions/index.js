@@ -379,11 +379,13 @@ function parseTideData(days = 2) {
 // Surface Pressure Observations
 // ============================================================
 
+// hasWind: only Pam Rocks and Squamish have reliable wind sensors. Whistler-Nesters
+// and Lillooet SWOB features don't populate avg_wnd_spd_10m_pst10mts.
 const OBS_STATIONS = {
-  pamrocks: { bbox: [-123.305, 49.483, -123.293, 49.493], elevation: 9, useMslp: true },
-  squamish: { bbox: [-123.168, 49.778, -123.155, 49.788], elevation: 57, useMslp: false },
-  whistler: { bbox: [-122.962, 50.124, -122.948, 50.134], elevation: 662, useMslp: false },
-  lillooet: { bbox: [-121.940, 50.679, -121.928, 50.689], elevation: 240, useMslp: true },
+  pamrocks: { bbox: [-123.305, 49.483, -123.293, 49.493], elevation: 9, useMslp: true, hasWind: true },
+  squamish: { bbox: [-123.168, 49.778, -123.155, 49.788], elevation: 57, useMslp: false, hasWind: true },
+  whistler: { bbox: [-122.962, 50.124, -122.948, 50.134], elevation: 662, useMslp: false, hasWind: false },
+  lillooet: { bbox: [-121.940, 50.679, -121.928, 50.689], elevation: 240, useMslp: true, hasWind: false },
 };
 
 // Reduce station pressure (hPa) to MSL using observed temp + standard lapse.
@@ -429,8 +431,8 @@ function aggregateHourlySwob(features, cfg) {
     const stnPres = parseFloat(props.stn_pres);
     const mslp = parseFloat(props.mslp);
     const tempC = parseFloat(props.air_temp);
-    const wndSpd = parseFloat(props.avg_wnd_spd_10m_pst10mts);
-    const wndDir = parseFloat(props.avg_wnd_dir_10m_pst10mts);
+    const wndSpd = cfg.hasWind ? parseFloat(props.avg_wnd_spd_10m_pst10mts) : NaN;
+    const wndDir = cfg.hasWind ? parseFloat(props.avg_wnd_dir_10m_pst10mts) : NaN;
 
     let pressure;
     if (cfg.useMslp) {
@@ -452,7 +454,11 @@ function aggregateHourlySwob(features, cfg) {
       byHour.set(key, { date: ph.date, hour: ph.hour, pressure, temperature, wind_speed, wind_dir, dist });
     }
   }
-  const series = { pressure: [], temperature: [], wind_speed: [], wind_dir: [] };
+  const series = { pressure: [], temperature: [] };
+  if (cfg.hasWind) {
+    series.wind_speed = [];
+    series.wind_dir = [];
+  }
   for (const o of byHour.values()) {
     if (o.pressure != null && isFinite(o.pressure)) {
       series.pressure.push({ date: o.date, hour: o.hour, value: Math.round(o.pressure * 10) / 10 });
@@ -460,10 +466,10 @@ function aggregateHourlySwob(features, cfg) {
     if (o.temperature != null && isFinite(o.temperature)) {
       series.temperature.push({ date: o.date, hour: o.hour, value: Math.round(o.temperature * 10) / 10 });
     }
-    if (o.wind_speed != null && isFinite(o.wind_speed)) {
+    if (cfg.hasWind && o.wind_speed != null && isFinite(o.wind_speed)) {
       series.wind_speed.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_speed * 10) / 10 });
     }
-    if (o.wind_dir != null && isFinite(o.wind_dir)) {
+    if (cfg.hasWind && o.wind_dir != null && isFinite(o.wind_dir)) {
       series.wind_dir.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_dir) });
     }
   }
@@ -479,59 +485,18 @@ async function fetchSwobStation(locId, cfg) {
   const bbox = cfg.bbox.join(",");
   const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
   const raw = await httpGet(url);
-  const empty = { pressure: [], temperature: [], wind_speed: [], wind_dir: [] };
+  const empty = cfg.hasWind
+    ? { pressure: [], temperature: [], wind_speed: [], wind_dir: [] }
+    : { pressure: [], temperature: [] };
   if (!raw) return empty;
   let json;
   try { json = JSON.parse(raw); } catch { return empty; }
   return aggregateHourlySwob(json.features || [], cfg);
 }
 
-// Pemberton's pressure/temperature scrape doesn't include wind. The PEMBERTON
-// AIRPORT (WINDS) SWOB station 1086081 publishes wind directly — query it
-// separately and merge into the Pemberton observations.
-async function fetchPembertonSwobWind() {
-  const bbox = "-122.748,50.297,-122.736,50.308";
-  const end = new Date();
-  const start = new Date(end.getTime() - 18 * 3600 * 1000);
-  const datetime = `${start.toISOString()}/${end.toISOString()}`;
-  const url = `https://api.weather.gc.ca/collections/swob-realtime/items?bbox=${bbox}&datetime=${encodeURIComponent(datetime)}&f=json&limit=2000&sortby=-date_tm-value`;
-  const raw = await httpGet(url);
-  const empty = { wind_speed: [], wind_dir: [] };
-  if (!raw) return empty;
-  let json;
-  try { json = JSON.parse(raw); } catch { return empty; }
-
-  const byHour = new Map();
-  for (const f of json.features || []) {
-    const props = f.properties || {};
-    const ts = props["date_tm-value"] || props.obs_date_tm;
-    const ph = ptHourFromUtc(ts);
-    if (!ph) continue;
-    const wndSpd = parseFloat(props.avg_wnd_spd_10m_pst10mts);
-    const wndDir = parseFloat(props.avg_wnd_dir_10m_pst10mts);
-    if (!isFinite(wndSpd) && !isFinite(wndDir)) continue;
-    const key = `${ph.date}T${ph.hour}`;
-    const dist = Math.abs(ph.minute - 0);
-    const prev = byHour.get(key);
-    if (!prev || dist < prev.dist) {
-      byHour.set(key, { date: ph.date, hour: ph.hour, wind_speed: wndSpd, wind_dir: wndDir, dist });
-    }
-  }
-  const series = { wind_speed: [], wind_dir: [] };
-  for (const o of byHour.values()) {
-    if (isFinite(o.wind_speed)) {
-      series.wind_speed.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_speed * 10) / 10 });
-    }
-    if (isFinite(o.wind_dir)) {
-      series.wind_dir.push({ date: o.date, hour: o.hour, value: Math.round(o.wind_dir) });
-    }
-  }
-  return series;
-}
-
 // Pemberton has no SWOB pressure source — scrape weather.gc.ca past_conditions HTML.
-// Same page also exposes temperature (header3m). Wind comes from the separate
-// PEMBERTON AIRPORT (WINDS) SWOB station — see fetchPembertonSwobWind.
+// Same page also exposes temperature (header3m). Wind is intentionally not collected
+// here; wind obs are scoped to Pam Rocks and Squamish only.
 async function fetchPembertonScrape() {
   const raw = await httpGet(
     "https://weather.gc.ca/past_conditions/index_e.html?station=wgp",
@@ -579,21 +544,13 @@ async function fetchAllObservations() {
   tasks.push((async () => { obs.pemberton = await fetchPembertonScrape(); })());
   await Promise.all(tasks);
 
-  // Merge Pemberton wind from the separate WINDS-only station.
-  const pemWind = await fetchPembertonSwobWind();
-  obs.pemberton.wind_speed = pemWind.wind_speed;
-  obs.pemberton.wind_dir = pemWind.wind_dir;
-
   const counts = Object.fromEntries(
-    Object.entries(obs).map(([k, v]) => [
-      k,
-      {
-        pressure: v.pressure?.length || 0,
-        temperature: v.temperature?.length || 0,
-        wind_speed: v.wind_speed?.length || 0,
-        wind_dir: v.wind_dir?.length || 0,
-      },
-    ])
+    Object.entries(obs).map(([k, v]) => {
+      const c = { pressure: v.pressure?.length || 0, temperature: v.temperature?.length || 0 };
+      if (v.wind_speed) c.wind_speed = v.wind_speed.length;
+      if (v.wind_dir) c.wind_dir = v.wind_dir.length;
+      return [k, c];
+    })
   );
   console.log(`Per-station obs counts: ${JSON.stringify(counts)}`);
   return {
