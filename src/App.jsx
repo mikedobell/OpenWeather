@@ -27,6 +27,7 @@ const ForecastChart = lazy(() => import('./ForecastChart'));
 const TideChart = lazy(() => import('./TideChart'));
 const SpitForecast = lazy(() => import('./SpitForecast'));
 const SpitSummary = lazy(() => import('./SpitSummary'));
+const PamRocksSummary = lazy(() => import('./PamRocksSummary'));
 const MarineForecast = lazy(() => import('./MarineForecast'));
 
 function Header() {
@@ -161,6 +162,7 @@ export default function App() {
       <Container maxW="container.xl" py={6}>
         <Suspense fallback={null}>
           <SpitSummary />
+          <PamRocksSummary />
         </Suspense>
 
         {/* Intro text */}

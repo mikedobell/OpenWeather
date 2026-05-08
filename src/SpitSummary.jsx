@@ -2,25 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { Flex, Heading, Text } from '@chakra-ui/react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
-
-const KMH_TO_KT = 0.539957;
+import { toKt, degToCardinal, currentTideMeters } from './wind';
 
 export default function SpitSummary() {
   const [latest, setLatest] = useState(null);
+  const [tide, setTide] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'cache', 'spit'));
-        if (cancelled || !snap.exists()) return;
-        const data = snap.data();
-        const obs = Array.isArray(data.obs_recent) ? data.obs_recent : [];
-        if (obs.length === 0) return;
-        const sorted = [...obs].sort((a, b) => (a.time < b.time ? 1 : -1));
-        setLatest(sorted[0]);
+        const [spitSnap, tideSnap] = await Promise.all([
+          getDoc(doc(db, 'cache', 'spit')),
+          getDoc(doc(db, 'cache', 'tide')),
+        ]);
+        if (cancelled) return;
+        if (spitSnap.exists()) {
+          const obs = spitSnap.data().obs_recent || [];
+          if (obs.length > 0) {
+            const sorted = [...obs].sort((a, b) => (a.time < b.time ? 1 : -1));
+            setLatest(sorted[0]);
+          }
+        }
+        if (tideSnap.exists()) {
+          setTide(currentTideMeters(tideSnap.data()));
+        }
       } catch {
-        // silent — just don't render the box
+        // silent
       }
     })();
     return () => { cancelled = true; };
@@ -28,8 +36,10 @@ export default function SpitSummary() {
 
   if (!latest) return null;
 
-  const avgKt = Math.round((latest.avg ?? 0) * KMH_TO_KT);
-  const gustKt = Math.round((latest.gust ?? 0) * KMH_TO_KT);
+  const avg = Math.round(toKt(latest.avg ?? 0));
+  const gust = Math.round(toKt(latest.gust ?? 0));
+  const dir = degToCardinal(latest.dir);
+  const tideStr = tide != null ? ` Tide ${tide.toFixed(1)}m` : '';
 
   return (
     <Flex
@@ -44,10 +54,11 @@ export default function SpitSummary() {
       mb={4}
     >
       <Heading size="md" m={0}>
-        Squamish Spit (knots):{' '}
-        <Text as="span" color="accent">{avgKt}</Text>
-        {', '}
-        <Text as="span" color="accent">{gustKt}</Text>
+        Squamish Spit:{' '}
+        <Text as="span" color="accent">
+          {avg}(g{gust}){dir ? ` ${dir}` : ''}
+        </Text>
+        {tideStr}
       </Heading>
     </Flex>
   );
